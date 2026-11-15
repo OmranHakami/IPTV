@@ -90,8 +90,15 @@ data class MovieEntity(
     val posterPath: String?,
     val backdropPath: String?,
     val metadataUpdatedAt: Long?,
+    val tmdbTitle: String? = null,
+    val tmdbOverview: String? = null,
+    val tmdbReleaseDate: String? = null,
     val syncGeneration: Long,
-)
+) {
+    val displayName: String get() = tmdbTitle?.takeIf { it.isNotBlank() } ?: name
+    val displayOverview: String? get() = tmdbOverview?.takeIf { it.isNotBlank() } ?: overview
+    val displayReleaseDate: String? get() = tmdbReleaseDate ?: releaseDate
+}
 
 @Entity(
     tableName = "series",
@@ -115,9 +122,16 @@ data class SeriesEntity(
     val posterPath: String?,
     val backdropPath: String?,
     val metadataUpdatedAt: Long?,
+    val tmdbTitle: String? = null,
+    val tmdbOverview: String? = null,
+    val tmdbReleaseDate: String? = null,
     val detailsLoaded: Boolean,
     val syncGeneration: Long,
-)
+) {
+    val displayName: String get() = tmdbTitle?.takeIf { it.isNotBlank() } ?: name
+    val displayOverview: String? get() = tmdbOverview?.takeIf { it.isNotBlank() } ?: overview
+    val displayReleaseDate: String? get() = tmdbReleaseDate ?: releaseDate
+}
 
 @Entity(
     tableName = "series_episodes",
