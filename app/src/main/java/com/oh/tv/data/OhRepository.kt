@@ -350,15 +350,18 @@ class OhRepository(
     private suspend fun syncLiveChannels(account: AccountEntity, credentials: XtreamCredentials, progress: (Int) -> Unit): Int {
         val generation = System.currentTimeMillis()
         var count = 0
+        var seen = 0
         xtream.openArray(account.baseUrl, credentials.username, credentials.password, "get_live_streams").use { body ->
             StreamingArrayParser.forEachBatchSuspending(body.source()) { batch ->
+                val batchStart = seen
+                seen += batch.size
                 val mapped = batch.mapIndexedNotNull { index, raw ->
                     val id = raw["stream_id"].asString() ?: return@mapIndexedNotNull null
                     LiveChannelEntity(
                         accountId = account.id,
                         providerId = id,
                         categoryId = raw["category_id"].asString().orEmpty(),
-                        number = raw["num"].asInt() ?: count + index + 1,
+                        number = raw["num"].asInt() ?: batchStart + index + 1,
                         name = raw["name"].asString() ?: "Untitled channel",
                         iconUrl = raw["stream_icon"].asString(),
                         epgChannelId = raw["epg_channel_id"].asString(),
