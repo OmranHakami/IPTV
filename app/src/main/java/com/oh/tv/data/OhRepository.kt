@@ -293,20 +293,25 @@ class OhRepository(
         if (item.metadataUpdatedAt != null) return item
         val id = item.tmdbId ?: return item
         val metadata = tmdb.movie(id).getOrNull() ?: return item
-        val updated = item.copy(
-            tmdbTitle = metadata.title.takeIf { it.isNotBlank() },
-            tmdbOverview = metadata.overview ?: item.tmdbOverview,
-            tmdbReleaseDate = metadata.releaseDate ?: item.tmdbReleaseDate,
-            runtimeMinutes = metadata.runtimeMinutes ?: item.runtimeMinutes,
-            tmdbRating = metadata.rating,
-            tmdbVoteCount = metadata.voteCount,
-            genres = metadata.genres,
-            posterPath = metadata.posterPath,
-            backdropPath = metadata.backdropPath,
-            metadataUpdatedAt = System.currentTimeMillis(),
-        )
-        database.catalogDao().upsertMovies(listOf(updated))
-        return updated
+        return database.withTransaction {
+            val current = database.catalogDao().moviesByIds(item.accountId, listOf(item.providerId))
+                .firstOrNull() ?: return@withTransaction item
+            if (current.metadataUpdatedAt != null || current.tmdbId != id) return@withTransaction current
+            val updated = current.copy(
+                tmdbTitle = metadata.title.takeIf { it.isNotBlank() } ?: current.tmdbTitle,
+                tmdbOverview = metadata.overview ?: current.tmdbOverview,
+                tmdbReleaseDate = metadata.releaseDate ?: current.tmdbReleaseDate,
+                runtimeMinutes = metadata.runtimeMinutes ?: current.runtimeMinutes,
+                tmdbRating = metadata.rating ?: current.tmdbRating,
+                tmdbVoteCount = metadata.voteCount ?: current.tmdbVoteCount,
+                genres = metadata.genres ?: current.genres,
+                posterPath = metadata.posterPath ?: current.posterPath,
+                backdropPath = metadata.backdropPath ?: current.backdropPath,
+                metadataUpdatedAt = System.currentTimeMillis(),
+            )
+            database.catalogDao().upsertMovies(listOf(updated))
+            updated
+        }
     }
 
     suspend fun enrichSeriesMetadata(item: SeriesEntity): SeriesEntity {
