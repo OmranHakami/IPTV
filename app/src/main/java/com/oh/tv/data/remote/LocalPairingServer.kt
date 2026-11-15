@@ -139,8 +139,13 @@ class LocalPairingServer(context: Context) {
         val array: JSONArray = json.optJSONArray("chunks")
             ?: return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
         if (array.length() !in 1..16) return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
-        val chunks = List(array.length()) { array.getString(it) }
-        if (chunks.any { it.length !in 300..400 }) return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
+        val chunks = (0 until array.length()).map { index ->
+            val chunk = array.opt(index)
+            if (chunk !is String || chunk.length !in 300..400) {
+                return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
+            }
+            chunk
+        }
         if (!submissions.trySend(chunks).isSuccess) return respond(output, 409, "application/json", "{\"error\":\"already_submitted\"}".toByteArray())
         respond(output, 202, "application/json", "{\"accepted\":true}".toByteArray())
     }
