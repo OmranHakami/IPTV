@@ -284,20 +284,27 @@ class OhRepository(
         if (item.metadataUpdatedAt != null) return item
         val id = item.tmdbId ?: return item
         val metadata = tmdb.movie(id).getOrNull() ?: return item
-        val updated = item.copy(
-            name = metadata.title.ifBlank { item.name },
-            overview = metadata.overview ?: item.overview,
-            releaseDate = metadata.releaseDate ?: item.releaseDate,
-            runtimeMinutes = metadata.runtimeMinutes ?: item.runtimeMinutes,
-            tmdbRating = metadata.rating,
-            tmdbVoteCount = metadata.voteCount,
-            genres = metadata.genres,
-            posterPath = metadata.posterPath,
-            backdropPath = metadata.backdropPath,
-            metadataUpdatedAt = System.currentTimeMillis(),
-        )
-        database.catalogDao().upsertMovies(listOf(updated))
-        return updated
+        return database.withTransaction {
+            // A catalog refresh may have replaced this row while TMDB was loading.
+            // Preserve the current provider fields and sync generation.
+            val current = database.catalogDao().moviesByIds(item.accountId, listOf(item.providerId))
+                .firstOrNull() ?: return@withTransaction item
+            if (current.metadataUpdatedAt != null || current.tmdbId != id) return@withTransaction current
+            val updated = current.copy(
+                name = metadata.title.ifBlank { current.name },
+                overview = metadata.overview ?: current.overview,
+                releaseDate = metadata.releaseDate ?: current.releaseDate,
+                runtimeMinutes = metadata.runtimeMinutes ?: current.runtimeMinutes,
+                tmdbRating = metadata.rating,
+                tmdbVoteCount = metadata.voteCount,
+                genres = metadata.genres,
+                posterPath = metadata.posterPath,
+                backdropPath = metadata.backdropPath,
+                metadataUpdatedAt = System.currentTimeMillis(),
+            )
+            database.catalogDao().upsertMovies(listOf(updated))
+            updated
+        }
     }
 
     suspend fun enrichSeriesMetadata(item: SeriesEntity): SeriesEntity {
