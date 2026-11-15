@@ -143,6 +143,7 @@ fun OhApp(viewModel: OhViewModel) {
             counts = catalogCounts,
             onLive = { viewModel.navigate(Destination.LiveTv) },
             onMovies = { viewModel.navigate(Destination.Movies) },
+            onShows = { viewModel.navigate(Destination.TvShows) },
             onSettings = { viewModel.openSettings(Destination.Hub) },
         )
         Destination.LiveTv -> LiveTvScreen(
