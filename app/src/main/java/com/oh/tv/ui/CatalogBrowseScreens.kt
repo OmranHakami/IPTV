@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +49,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -181,6 +184,328 @@ fun DesignedSeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
         onSearch = { viewModel.navigate(Destination.Search) },
         onProfile = { viewModel.openSettings(Destination.TvShows) },
     )
+}
+
+private enum class SearchResultType { All, Movies, Shows }
+private data class SearchEntry(val item: CatalogItem, val type: SearchResultType)
+
+@Composable
+fun DesignedSearchScreen(viewModel: OhViewModel) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val favoriteMovies by viewModel.favoriteMovies.collectAsStateWithLifecycle()
+    val favoriteSeries by viewModel.favoriteSeries.collectAsStateWithLifecycle()
+    val movieFavoriteIds = favoriteMovies.mapTo(mutableSetOf()) { it.providerId }
+    val seriesFavoriteIds = favoriteSeries.mapTo(mutableSetOf()) { it.providerId }
+    val entries = state.searchMovies.map { movie ->
+        SearchEntry(
+            CatalogItem(
+                id = "movie:${movie.providerId}", categoryId = movie.categoryId, title = movie.displayName,
+                artworkUrl = movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: movie.providerIconUrl,
+                genre = movie.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "MOVIE",
+                year = movie.displayReleaseDate?.take(4).orEmpty(), runtime = movie.runtimeMinutes?.let(::formatRuntime),
+                rating = movie.tmdbRating ?: movie.providerRating, overview = movie.displayOverview,
+                metadataKey = movie.metadataUpdatedAt, saved = movie.providerId in movieFavoriteIds,
+                onVisible = { viewModel.loadMovieMetadata(movie) }, onToggleSaved = { viewModel.toggleFavorite(movie) },
+                onOpen = { viewModel.openMovie(movie) },
+            ),
+            SearchResultType.Movies,
+        )
+    } + state.searchSeries.map { show ->
+        SearchEntry(
+            CatalogItem(
+                id = "series:${show.providerId}", categoryId = show.categoryId, title = show.displayName,
+                artworkUrl = show.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: show.providerIconUrl,
+                genre = show.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "SERIES",
+                year = show.displayReleaseDate?.take(4).orEmpty(), runtime = null,
+                rating = show.tmdbRating ?: show.providerRating, overview = show.displayOverview,
+                metadataKey = show.metadataUpdatedAt, saved = show.providerId in seriesFavoriteIds,
+                onVisible = { viewModel.loadSeriesMetadata(show) }, onToggleSaved = { viewModel.toggleFavorite(show) },
+                onOpen = { viewModel.openSeries(show) },
+            ),
+            SearchResultType.Shows,
+        )
+    }
+    SearchExperience(
+        state = state,
+        entries = entries,
+        onQuery = viewModel::search,
+        onHome = { viewModel.navigate(Destination.Hub) },
+        onMovies = { viewModel.navigate(Destination.Movies) },
+        onShows = { viewModel.navigate(Destination.TvShows) },
+        onMyList = { viewModel.navigate(Destination.MyList) },
+        onProfile = { viewModel.openSettings(Destination.Search) },
+    )
+}
+
+@Composable
+private fun SearchExperience(
+    state: OhUiState,
+    entries: List<SearchEntry>,
+    onQuery: (String) -> Unit,
+    onHome: () -> Unit,
+    onMovies: () -> Unit,
+    onShows: () -> Unit,
+    onMyList: () -> Unit,
+    onProfile: () -> Unit,
+) {
+    var filter by remember { mutableStateOf(SearchResultType.All) }
+    var focusedId by remember(state.searchQuery) { mutableStateOf<String?>(null) }
+    val filtered = entries.filter { filter == SearchResultType.All || it.type == filter }
+    val focused = filtered.firstOrNull { it.item.id == focusedId } ?: filtered.firstOrNull()
+    BackHandler { onMovies() }
+    Box(Modifier.fillMaxSize().background(CatalogBackground)) {
+        Box(Modifier.fillMaxWidth().height(220.dp).background(Brush.verticalGradient(listOf(Color(0xFF111827), CatalogBackground))))
+        SearchNavigation(state.searchQuery, onQuery, onHome, onMovies, onShows, onMyList, onProfile)
+        when {
+            state.searchQuery.isBlank() -> SearchDiscover(state.recentSearches, onQuery)
+            state.searching -> SearchLoading(state.searchQuery)
+            entries.isEmpty() -> SearchNoResults(state.searchQuery, onQuery)
+            else -> SearchResults(state.searchQuery, filtered, filter, { filter = it }, focused, { focusedId = it }, onQuery)
+        }
+    }
+}
+
+@Composable
+private fun SearchNavigation(
+    query: String,
+    onQuery: (String) -> Unit,
+    onHome: () -> Unit,
+    onMovies: () -> Unit,
+    onShows: () -> Unit,
+    onMyList: () -> Unit,
+    onProfile: () -> Unit,
+) {
+    Row(
+        Modifier.offset(32.dp, 18.dp).width(1376.dp).height(56.dp).clip(RoundedCornerShape(16.dp))
+            .background(Color(0xCC0E131E)).border(1.dp, Color(0x0DFFFFFF), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.foundation.Image(painterResource(R.drawable.pairing_brand), null, Modifier.size(40.dp))
+            Text("CHROMA", color = CatalogBright, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.1.sp)
+        }
+        Row(Modifier.height(40.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            CatalogNavItem("Home", false, onHome)
+            CatalogNavItem("Movies", true, onMovies)
+            CatalogNavItem("TV Shows", false, onShows)
+            CatalogNavItem("My List", false, onMyList)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            SearchInput(query, onQuery)
+            var profileFocused by remember { mutableStateOf(false) }
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (profileFocused) Color(0xFF263152) else Color(0xFF1A2340))
+                    .border(if (profileFocused) 2.dp else 1.dp, if (profileFocused) CatalogBlue else Color(0x777C9CFF), RoundedCornerShape(12.dp))
+                    .onFocusChanged { profileFocused = it.isFocused }.clickable(onClick = onProfile),
+                contentAlignment = Alignment.Center,
+            ) { Text("OH", color = Color(0xFFB9C7FF), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold) }
+        }
+    }
+}
+
+@Composable
+private fun SearchInput(query: String, onQuery: (String) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { requester.requestFocus() }
+    BasicTextField(
+        value = query, onValueChange = onQuery, singleLine = true,
+        textStyle = androidx.compose.ui.text.TextStyle(color = CatalogBright, fontSize = 12.sp, fontWeight = FontWeight.Bold),
+        cursorBrush = SolidColor(CatalogBlue),
+        modifier = Modifier.width(250.dp).height(40.dp).focusRequester(requester).onFocusChanged { focused = it.isFocused },
+        decorationBox = { field ->
+            Row(
+                Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(if (focused) Color(0xFF202839) else CatalogSurface)
+                    .border(if (focused) 2.dp else 1.dp, if (focused) CatalogBlue else Color(0xFF34425A), RoundedCornerShape(10.dp)).padding(horizontal = 13.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PairingIcon("search", if (focused) CatalogBright else CatalogQuiet, Modifier.size(18.dp))
+                Box(Modifier.weight(1f)) {
+                    if (query.isBlank()) Text("Search movies and shows", color = CatalogQuiet, fontSize = 11.sp)
+                    field()
+                }
+                if (query.isNotBlank()) Text("×", color = CatalogQuiet, fontSize = 16.sp, modifier = Modifier.clickable { onQuery("") })
+            }
+        },
+    )
+}
+
+@Composable
+private fun SearchDiscover(recentSearches: List<String>, onQuery: (String) -> Unit) {
+    Row(Modifier.offset(48.dp, 108.dp).width(1344.dp).height(660.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(Modifier.width(768.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Text("What do you want to watch?", color = CatalogBright, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Use the remote or the on-screen keyboard. Results appear as you type.", color = CatalogQuiet, fontSize = 12.sp)
+            Text("RECENT SEARCHES", color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.3.sp)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (recentSearches.isEmpty()) Text("Your successful searches will appear here.", color = CatalogQuiet, fontSize = 11.sp)
+                else recentSearches.forEach { label -> SearchSuggestion(label) { onQuery(label) } }
+            }
+            Text("POPULAR RIGHT NOW", color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.3.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Sci-Fi", "Award winners", "Comedy").forEach { label -> SearchChip(label, false) { onQuery(label) } }
+            }
+        }
+        SearchKeyboard("", onQuery)
+    }
+}
+
+@Composable
+private fun SearchLoading(query: String) {
+    Column(
+        Modifier.offset(48.dp, 112.dp).width(1344.dp).height(650.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center,
+    ) {
+        PairingIcon("search", CatalogBlue, Modifier.size(38.dp))
+        Spacer(Modifier.height(18.dp))
+        Text("Searching for “$query”", color = CatalogBright, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Checking your local movie and TV library…", color = CatalogQuiet, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun SearchNoResults(query: String, onQuery: (String) -> Unit) {
+    Row(Modifier.offset(48.dp, 112.dp).width(1344.dp).height(650.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Column(
+            Modifier.width(754.dp).fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(Modifier.size(72.dp).clip(RoundedCornerShape(20.dp)).background(CatalogSurface), contentAlignment = Alignment.Center) {
+                PairingIcon("search", Color(0xFFFF7A7A), Modifier.size(30.dp))
+            }
+            Spacer(Modifier.height(18.dp))
+            Text("No matches for “$query”", color = CatalogBright, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Check the spelling or try a title, actor, director, or genre.", color = CatalogQuiet, fontSize = 12.sp)
+            Spacer(Modifier.height(18.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("Sci-Fi", "Comedy", "TV Shows").forEach { label -> SearchChip(label, false) { onQuery(label) } }
+            }
+            Spacer(Modifier.height(18.dp))
+            SearchChip("Clear search", true) { onQuery("") }
+        }
+        SearchKeyboard(query, onQuery)
+    }
+}
+
+@Composable
+private fun SearchResults(
+    query: String,
+    entries: List<SearchEntry>,
+    filter: SearchResultType,
+    onFilter: (SearchResultType) -> Unit,
+    focused: SearchEntry?,
+    onFocused: (String) -> Unit,
+    onQuery: (String) -> Unit,
+) {
+    Column(Modifier.offset(32.dp, 106.dp).width(1376.dp).height(672.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Row(Modifier.fillMaxWidth().height(59.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+            Column {
+                Text("SEARCH RESULTS", color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.3.sp)
+                Text("${entries.size} results for “$query”", color = CatalogBright, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SearchChip("All", filter == SearchResultType.All) { onFilter(SearchResultType.All) }
+                SearchChip("Movies", filter == SearchResultType.Movies) { onFilter(SearchResultType.Movies) }
+                SearchChip("TV Shows", filter == SearchResultType.Shows) { onFilter(SearchResultType.Shows) }
+            }
+        }
+        LazyRow(Modifier.fillMaxWidth().height(340.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(entries, key = { it.item.id }) { entry ->
+                SearchResultCard(entry, focused?.item?.id == entry.item.id) { onFocused(entry.item.id) }
+            }
+        }
+        focused?.let { SearchFocusedPreview(it, onQuery) }
+    }
+}
+
+@Composable
+private fun SearchResultCard(entry: SearchEntry, selected: Boolean, onFocused: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(entry.item.id, entry.item.metadataKey) { entry.item.onVisible() }
+    Box(
+        Modifier.width(224.dp).height(340.dp).zIndex(if (focused) 2f else 0f)
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }.clickable(onClick = entry.item.onOpen),
+    ) { CatalogCompactCard(entry.item, focused || selected) }
+}
+
+@Composable
+private fun SearchFocusedPreview(entry: SearchEntry, onQuery: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().height(166.dp).clip(RoundedCornerShape(16.dp)).background(CatalogSurface)
+            .border(1.dp, CatalogStroke, RoundedCornerShape(16.dp)).padding(22.dp),
+        horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CatalogArtwork(entry.item, Modifier.width(190.dp).height(122.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(entry.item.title, color = CatalogBright, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            CatalogMetadata(entry.item)
+            Text(entry.item.overview ?: "Open this title to see more information.", color = CatalogQuiet, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(if (entry.type == SearchResultType.Movies) "MOVIE" else "TV SHOW", color = CatalogPeach, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+            SearchChip("Open details", true, entry.item.onOpen)
+            Text("Search related", color = CatalogQuiet, fontSize = 10.sp, modifier = Modifier.clickable { onQuery(entry.item.genre) })
+        }
+    }
+}
+
+@Composable
+private fun SearchKeyboard(query: String, onQuery: (String) -> Unit) {
+    Column(Modifier.width(520.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("ON-SCREEN KEYBOARD", color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.3.sp)
+        listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM").forEach { keys ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally)) {
+                keys.forEach { key -> SearchKey(key.toString()) { onQuery(query + key.lowercaseChar()) } }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+            SearchKey("CLEAR", Modifier.width(78.dp)) { onQuery("") }
+            SearchKey("SPACE", Modifier.width(250.dp)) { onQuery(query + " ") }
+            SearchKey("⌫", Modifier.width(78.dp)) { onQuery(query.dropLast(1)) }
+        }
+        Row(
+            Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF111827)).padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PairingIcon("remote", CatalogBlue, Modifier.size(18.dp))
+            Text("Navigate with arrows  •  Select to enter  •  Back to close", color = CatalogQuiet, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun SearchKey(label: String, modifier: Modifier = Modifier.width(42.dp), onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier.height(42.dp).clip(RoundedCornerShape(9.dp)).background(if (focused) CatalogBlue else Color(0xFF182131))
+            .border(1.dp, if (focused) Color.White else Color(0xFF34425A), RoundedCornerShape(9.dp))
+            .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = if (focused) CatalogBackground else CatalogBright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold) }
+}
+
+@Composable
+private fun SearchSuggestion(label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.width(250.dp).height(34.dp).clip(RoundedCornerShape(9.dp)).background(CatalogSurface)
+            .border(1.dp, CatalogStroke, RoundedCornerShape(9.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PairingIcon("history", CatalogQuiet, Modifier.size(14.dp))
+        Text(label, color = CatalogBright, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun SearchChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        Modifier.height(38.dp).clip(RoundedCornerShape(10.dp))
+            .background(if (selected) CatalogPeach.copy(alpha = 0.14f) else if (focused) Color(0xFF263247) else CatalogSurface)
+            .border(if (focused) 2.dp else 1.dp, if (focused) CatalogBlue else if (selected) CatalogPeach.copy(alpha = 0.55f) else CatalogStroke, RoundedCornerShape(10.dp))
+            .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick).padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = if (selected) Color(0xFFFFD09A) else CatalogBright, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable

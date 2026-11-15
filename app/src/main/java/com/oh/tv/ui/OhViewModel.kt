@@ -69,6 +69,8 @@ data class OhUiState(
     val playerReturn: Destination = Destination.Hub,
     val favorite: Boolean = false,
     val searchQuery: String = "",
+    val searching: Boolean = false,
+    val recentSearches: List<String> = emptyList(),
     val searchMovies: List<MovieEntity> = emptyList(),
     val searchSeries: List<SeriesEntity> = emptyList(),
     val settingsReturn: Destination = Destination.Hub,
@@ -408,14 +410,26 @@ class OhViewModel(
 
     fun search(query: String) {
         val account = mutableState.value.account ?: return
-        mutableState.value = mutableState.value.copy(searchQuery = query)
         searchJob?.cancel()
+        mutableState.value = mutableState.value.copy(
+            searchQuery = query,
+            searching = query.isNotBlank(),
+            searchMovies = emptyList(),
+            searchSeries = emptyList(),
+        )
+        if (query.isBlank()) return
         searchJob = viewModelScope.launch {
             delay(250)
-            if (query.isBlank()) mutableState.value = mutableState.value.copy(searchMovies = emptyList(), searchSeries = emptyList())
-            else mutableState.value = mutableState.value.copy(
-                searchMovies = repository.searchMovies(account.id, query),
-                searchSeries = repository.searchSeries(account.id, query),
+            val movies = repository.searchMovies(account.id, query)
+            val series = repository.searchSeries(account.id, query)
+            val recent = if (movies.isNotEmpty() || series.isNotEmpty()) {
+                (listOf(query.trim()) + mutableState.value.recentSearches.filterNot { it.equals(query.trim(), ignoreCase = true) }).take(3)
+            } else mutableState.value.recentSearches
+            mutableState.value = mutableState.value.copy(
+                searching = false,
+                recentSearches = recent,
+                searchMovies = movies,
+                searchSeries = series,
             )
         }
     }

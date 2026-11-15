@@ -174,7 +174,7 @@ fun OhApp(viewModel: OhViewModel) {
             ?: StatusPanel("Movie unavailable", "The selected movie is no longer in the local catalog.")
         Destination.SeriesDetails -> state.selectedSeries?.let { SeriesDetailsScreen(it, episodes, seriesProgress, state, viewModel::playEpisode, viewModel::toggleFavorite) { viewModel.navigate(Destination.TvShows) } }
             ?: Screen { StatusPanel("TV show unavailable", "The selected TV show is no longer in the local catalog.") }
-        Destination.Search -> SearchScreen(state, viewModel::search, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
+        Destination.Search -> DesignedSearchScreen(viewModel)
         Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
         Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
@@ -584,39 +584,6 @@ private fun remainingLabel(progress: PlaybackProgressEntity): String {
     if (progress.completed) return "Watched"
     val minutes = ((progress.durationMs - progress.positionMs).coerceAtLeast(0) / 60_000)
     return if (minutes > 0) "${minutes}m left" else "Resume"
-}
-
-@Composable
-private fun SearchScreen(
-    state: OhUiState,
-    search: (String) -> Unit,
-    openMovie: (MovieEntity) -> Unit,
-    openSeries: (SeriesEntity) -> Unit,
-    loadMovie: (MovieEntity) -> Unit,
-    loadSeries: (SeriesEntity) -> Unit,
-    back: () -> Unit,
-) {
-    Screen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-            OhTopBar("Search", back)
-            OhTextField(state.searchQuery, search, "Search movies and TV shows")
-            if (state.searchQuery.isNotBlank() && state.searchMovies.isEmpty() && state.searchSeries.isEmpty()) {
-                EmptyShelf("No local results")
-            }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(state.searchMovies, key = { "m:${it.providerId}" }) { movie ->
-                    LaunchedEffect(movie.accountId, movie.providerId, movie.metadataUpdatedAt) { loadMovie(movie) }
-                    MovieShelfCard(movie) { openMovie(movie) }
-                }
-                items(state.searchSeries, key = { "s:${it.providerId}" }) { show ->
-                    LaunchedEffect(show.accountId, show.providerId, show.metadataUpdatedAt) { loadSeries(show) }
-                    FocusSurface({ openSeries(show) }, Modifier.width(120.dp).height(88.dp), Surface, SurfaceLifted) {
-                        Text(show.displayName, color = WarmWhite, modifier = Modifier.padding(12.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable
