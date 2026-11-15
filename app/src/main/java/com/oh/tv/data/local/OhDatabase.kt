@@ -44,6 +44,7 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
             db.execSQL("ALTER TABLE $table ADD COLUMN tmdbOverview TEXT")
             db.execSQL("ALTER TABLE $table ADD COLUMN tmdbReleaseDate TEXT")
             db.execSQL("UPDATE $table SET tmdbOverview = overview, tmdbReleaseDate = releaseDate WHERE metadataUpdatedAt IS NOT NULL")
+            db.execSQL("UPDATE $table SET metadataUpdatedAt = NULL WHERE metadataUpdatedAt IS NOT NULL")
         }
         // Previous movie enrichment replaced the IPTV title in-place. The original title
         // cannot be reconstructed reliably; retain the current title as the IPTV baseline.
