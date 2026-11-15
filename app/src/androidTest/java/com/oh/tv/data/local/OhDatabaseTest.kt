@@ -24,9 +24,32 @@ class OhDatabaseTest {
 
     @After fun closeDatabase() = database.close()
 
+    @Test fun tmdbMetadataDoesNotReplaceOriginalIptvFields() = runBlocking {
+        val account = AccountEntity("a", "Test", "http://host", "alias", "Active", null, 1)
+        database.accountDao().upsert(account)
+        val movie = MovieEntity(
+            accountId = "a", providerId = "10", name = "IPTV Original",
+            containerExtension = "mp4", providerIconUrl = null, providerRating = 6.0,
+            addedAt = 1, tmdbId = 100, overview = "IPTV synopsis", releaseDate = "2020-01-01",
+            runtimeMinutes = null, tmdbRating = 8.0, tmdbVoteCount = null,
+            genres = null, posterPath = null, backdropPath = null,
+            metadataUpdatedAt = 2, tmdbTitle = "TMDB Title",
+            tmdbOverview = "TMDB synopsis", tmdbReleaseDate = "2021-01-01",
+            syncGeneration = 1,
+        )
+        database.catalogDao().upsertMovies(listOf(movie))
+        val saved = database.catalogDao().moviesByIds("a", listOf("10")).single()
+        assertEquals("IPTV Original", saved.name)
+        assertEquals("IPTV synopsis", saved.overview)
+        assertEquals("2020-01-01", saved.releaseDate)
+        assertEquals("TMDB Title", saved.displayName)
+        assertEquals("TMDB synopsis", saved.displayOverview)
+        assertEquals("2021-01-01", saved.displayReleaseDate)
+    }
+
     @Test fun favoritesAndContinueWatchingRemainAccountScoped() = runBlocking {
         val account = AccountEntity("a", "Test", "http://host", "alias", "Active", null, 1)
-        val movie = MovieEntity("a", "10", "Movie", "mp4", null, null, 1, null, null, null, null, null, null, null, null, null, 1)
+        val movie = MovieEntity(accountId = "a", providerId = "10", name = "Movie", containerExtension = "mp4", providerIconUrl = null, providerRating = null, addedAt = 1, tmdbId = null, overview = null, releaseDate = null, runtimeMinutes = null, tmdbRating = null, tmdbVoteCount = null, genres = null, posterPath = null, backdropPath = null, metadataUpdatedAt = null, syncGeneration = 1)
         database.accountDao().upsert(account)
         database.catalogDao().upsertMovies(listOf(movie))
         database.personalDao().upsertFavorite(FavoriteEntity("a", "movie", "10", 1))
