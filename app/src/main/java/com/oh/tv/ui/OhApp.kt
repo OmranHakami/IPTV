@@ -51,6 +51,20 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import com.oh.tv.BuildConfig
+import com.oh.tv.data.remote.MovieSubtitleMatcher
+import com.oh.tv.data.remote.MovieSubtitle
+import com.oh.tv.data.remote.OpenSubtitlesGateway
+import com.oh.tv.data.remote.TmdbGateway
+import com.oh.tv.data.remote.MovieIdentityLookup
+import com.oh.tv.data.remote.SubtitleMatch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import android.net.Uri
+import java.io.File
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -161,7 +175,7 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.Search -> SearchScreen(state, viewModel::search, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
-        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress) }
+        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> MovieSubtitle(movie.name, movie.releaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
     }
 }
@@ -731,10 +745,20 @@ private fun SettingsScreen(state: OhUiState, back: () -> Unit, sync: () -> Unit,
 }
 
 @Composable
-private fun PlayerScreen(url: String, title: String, startPositionMs: Long, saveProgress: (Long, Long) -> Unit) {
+private fun PlayerScreen(url: String, title: String, startPositionMs: Long, saveProgress: (Long, Long) -> Unit, subtitleMovie: MovieSubtitle? = null) {
     val context = LocalContext.current
     var error by remember(url) { mutableStateOf<String?>(null) }
     var buffering by remember(url) { mutableStateOf(true) }
+    val subtitleApi = remember { OpenSubtitlesGateway(BuildConfig.OPENSUBTITLES_API_KEY) }
+    val tmdbApi = remember { TmdbGateway(BuildConfig.TMDB_API_KEY) }
+    val matcher = remember { MovieSubtitleMatcher(subtitleApi, object : MovieIdentityLookup {
+        override suspend fun resolve(movie: MovieSubtitle) = tmdbApi.resolveSubtitleMovie(movie)
+    }) }
+    val coroutineScope = rememberCoroutineScope()
+    var subtitleResults by remember(url) { mutableStateOf<List<SubtitleMatch>>(emptyList()) }
+    var subtitleMessage by remember(url) { mutableStateOf<String?>(null) }
+    var subtitleBusy by remember(url) { mutableStateOf(false) }
+    var showSubtitleSearch by remember(url) { mutableStateOf(false) }
     val exoPlayer = remember(url) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(url))
@@ -768,6 +792,55 @@ private fun PlayerScreen(url: String, title: String, startPositionMs: Long, save
     }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(factory = { PlayerView(it).apply { player = exoPlayer; useController = true; keepScreenOn = true } }, modifier = Modifier.fillMaxSize())
+        if (subtitleMovie != null) {
+            Column(Modifier.align(Alignment.TopEnd).padding(16.dp), horizontalAlignment = Alignment.End) {
+                OhButton("Online subtitles", { showSubtitleSearch = !showSubtitleSearch })
+                if (showSubtitleSearch) {
+                    Column(Modifier.background(Surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OhButton(if (subtitleBusy) "Searching…" else "Search Arabic / English", {
+                            if (!subtitleBusy) coroutineScope.launch {
+                                subtitleBusy = true
+                                subtitleMessage = null
+                                try {
+                                    subtitleResults = matcher.find(subtitleMovie, listOf("ar", "en"))
+                                    if (subtitleResults.isEmpty()) subtitleMessage = "No subtitles found"
+                                } catch (_: Exception) { subtitleMessage = "Subtitle search failed" }
+                                finally { subtitleBusy = false }
+                            }
+                        })
+                        subtitleResults.take(12).forEach { subtitle ->
+                            OhButton("${subtitle.language} · ${subtitle.release ?: "Subtitle"}", {
+                                if (!subtitleBusy) coroutineScope.launch {
+                                    subtitleBusy = true
+                                    try {
+                                        val bytes = subtitleApi.download(subtitle.id)
+                                        val file = withContext(Dispatchers.IO) {
+                                            val dir = File(context.cacheDir, "subtitles").apply { mkdirs() }
+                                            File(dir, "${subtitle.id}.srt").apply { writeBytes(bytes) }
+                                        }
+                                        val position = exoPlayer.currentPosition
+                                        val media = MediaItem.Builder().setUri(url)
+                                            .setSubtitleConfigurations(listOf(
+                                                MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
+                                                    .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+                                                    .setLanguage(subtitle.language)
+                                                    .setSelectionFlags(1)
+                                                    .build()
+                                            )).build()
+                                        exoPlayer.setMediaItem(media, position)
+                                        exoPlayer.prepare()
+                                        exoPlayer.play()
+                                        showSubtitleSearch = false
+                                    } catch (_: Exception) { subtitleMessage = "Subtitle download failed" }
+                                    finally { subtitleBusy = false }
+                                }
+                            })
+                        }
+                        subtitleMessage?.let { Text(it, color = Muted) }
+                    }
+                }
+            }
+        }
         if (buffering && error == null) {
             Box(Modifier.fillMaxSize().background(Color(0x66000000)), contentAlignment = Alignment.Center) {
                 Text("Loading ${title.ifBlank { "stream" }}…", color = WarmWhite, fontSize = 16.sp)
