@@ -32,6 +32,15 @@ class BoundedSubtitleDownloadTest {
         org.junit.Assert.assertTrue(readCount <= 8193)
     }
 
+    @Test fun enforcesProductionTwoMegabyteLimit() {
+        val limit = 2_000_000
+        val exact = ByteArray(limit) { 65 }
+        assertArrayEquals(exact, readBoundedSubtitle(ByteArrayInputStream(exact), limit.toLong()))
+        assertThrows(IllegalStateException::class.java) {
+            readBoundedSubtitle(ByteArrayInputStream(ByteArray(limit + 1)), limit.toLong())
+        }
+    }
+
     @Test fun acceptsEmptyBody() {
         assertArrayEquals(byteArrayOf(), readBoundedSubtitle(ByteArrayInputStream(byteArrayOf()), 16))
     }
