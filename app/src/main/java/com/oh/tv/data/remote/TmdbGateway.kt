@@ -17,6 +17,40 @@ class TmdbGateway(
     suspend fun movie(id: Long): Result<TmdbMetadata> = details("movie", id)
     suspend fun series(id: Long): Result<TmdbMetadata> = details("tv", id)
 
+    /** Resolve movie metadata only when subtitle lookup has no direct match. */
+    suspend fun resolveSubtitleMovie(movie: SubtitleMovie): SubtitleMovie? = withContext(Dispatchers.IO) {
+        if (!enabled) return@withContext null
+        val url = "https://api.themoviedb.org/3/".toHttpUrl().newBuilder().apply {
+            if (movie.tmdbId != null) {
+                addPathSegment("movie").addPathSegment(movie.tmdbId.toString())
+                addQueryParameter("append_to_response", "external_ids")
+            } else {
+                addPathSegment("search").addPathSegment("movie")
+                addQueryParameter("query", movie.title)
+                movie.year?.let { addQueryParameter("year", it.toString()) }
+            }
+            addQueryParameter("api_key", apiKey)
+        }.build()
+        val candidate = client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            if (!response.isSuccessful) return@withContext null
+            val root = JsonReader.of(requireNotNull(response.body).source()).readJsonValue().asMap()
+            if (movie.tmdbId != null) root else root["results"].asList().firstOrNull()?.asMap() ?: return@withContext null
+        }
+        val id = candidate["id"].asLong() ?: return@withContext null
+        val imdb = if (movie.tmdbId != null) candidate["imdb_id"].asString()
+            ?: candidate["external_ids"].asMap()["imdb_id"].asString()
+        else client.newCall(Request.Builder().url("https://api.themoviedb.org/3/movie/$id/external_ids".toHttpUrl().newBuilder()
+            .addQueryParameter("api_key", apiKey).build()).build()).execute().use { response ->
+            if (response.isSuccessful) JsonReader.of(requireNotNull(response.body).source()).readJsonValue().asMap()["imdb_id"].asString() else null
+        }
+        movie.copy(
+            title = candidate["title"].asString() ?: movie.title,
+            year = candidate["release_date"].asString()?.take(4)?.toIntOrNull() ?: movie.year,
+            tmdbId = id,
+            imdbId = imdb ?: movie.imdbId,
+        )
+    }
+
     private suspend fun details(type: String, id: Long): Result<TmdbMetadata> = withContext(Dispatchers.IO) {
         runCatching {
             check(enabled) { "TMDB is not configured" }
