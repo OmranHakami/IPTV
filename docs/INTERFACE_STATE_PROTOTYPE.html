@@ -1,0 +1,180 @@
+<div id="iptv-prototype">
+  <div class="viz-controls">
+    <label class="form-label">Page
+      <select class="form-select" id="page-select"></select>
+    </label>
+    <label class="form-label">State
+      <select class="form-select" id="state-select"></select>
+    </label>
+  </div>
+  <div class="tv-shell" id="tv-shell" aria-live="polite"></div>
+</div>
+
+<style>
+#iptv-prototype{display:grid;gap:12px;color:var(--foreground)}
+#iptv-prototype .tv-shell{min-height:520px;background:color-mix(in srgb,var(--background) 82%,var(--foreground) 18%);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:0 18px 45px color-mix(in srgb,var(--foreground) 14%,transparent);position:relative}
+#iptv-prototype .screen{min-height:520px;padding:28px;display:grid;gap:20px;align-content:start}
+#iptv-prototype .top{display:flex;align-items:center;justify-content:space-between;gap:18px}
+#iptv-prototype .brand{display:flex;align-items:center;gap:10px;font-weight:500}
+#iptv-prototype .mark{width:28px;height:28px;border-radius:9px;background:var(--primary);display:inline-grid;place-items:center;color:var(--primary-foreground)}
+#iptv-prototype .settings{display:flex;align-items:center;gap:8px;color:var(--muted-foreground)}
+#iptv-prototype .hero-title{font-size:clamp(28px,5vw,54px);font-weight:500;max-width:780px}
+#iptv-prototype .sub{color:var(--muted-foreground);max-width:720px}
+#iptv-prototype .choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+#iptv-prototype .choice,.poster,.episode,.channel,.field,.setting-row,.status-panel{background:var(--card);color:var(--card-foreground);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+#iptv-prototype .choice.selected,#iptv-prototype .poster.selected,#iptv-prototype .episode.selected,#iptv-prototype .channel.selected{outline:3px solid var(--ring);outline-offset:2px}
+#iptv-prototype .art{height:180px;background:linear-gradient(135deg,color-mix(in srgb,var(--viz-series-1) 48%,var(--card)),color-mix(in srgb,var(--viz-series-3) 42%,var(--card)));display:grid;place-items:center;font-size:42px}
+#iptv-prototype .choice:nth-child(2) .art{background:linear-gradient(135deg,color-mix(in srgb,var(--viz-series-4) 45%,var(--card)),color-mix(in srgb,var(--viz-series-2) 42%,var(--card)))}
+#iptv-prototype .choice-copy{padding:20px;display:grid;gap:6px}
+#iptv-prototype .choice-copy strong{font-size:24px;font-weight:500}
+#iptv-prototype .two-col{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px}
+#iptv-prototype .side{display:grid;gap:8px;align-content:start}
+#iptv-prototype .nav-item{padding:12px 14px;border-radius:10px;color:var(--muted-foreground)}
+#iptv-prototype .nav-item.active{background:var(--primary);color:var(--primary-foreground)}
+#iptv-prototype .content{display:grid;gap:18px;min-width:0}
+#iptv-prototype .rows{display:grid;gap:16px}
+#iptv-prototype .shelf{display:grid;gap:8px}
+#iptv-prototype .cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+#iptv-prototype .poster{min-height:118px;background:linear-gradient(145deg,color-mix(in srgb,var(--viz-series-1) 25%,var(--card)),var(--card));display:flex;align-items:flex-end;padding:12px}
+#iptv-prototype .poster:nth-child(2n){background:linear-gradient(145deg,color-mix(in srgb,var(--viz-series-4) 24%,var(--card)),var(--card))}
+#iptv-prototype .poster:nth-child(3n){background:linear-gradient(145deg,color-mix(in srgb,var(--viz-series-3) 24%,var(--card)),var(--card))}
+#iptv-prototype .live-grid{display:grid;grid-template-columns:180px 1fr 1.25fr;gap:14px}
+#iptv-prototype .channels{display:grid;gap:8px}
+#iptv-prototype .channel{padding:12px;display:grid;grid-template-columns:34px 1fr;gap:10px}
+#iptv-prototype .preview{background:color-mix(in srgb,var(--card) 75%,var(--viz-series-1) 25%);border-radius:16px;min-height:220px;padding:20px;display:grid;align-content:end}
+#iptv-prototype .grid-posters{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+#iptv-prototype .grid-posters .poster{min-height:170px}
+#iptv-prototype .details{display:grid;gap:16px;min-height:430px;background:linear-gradient(100deg,color-mix(in srgb,var(--background) 96%,transparent) 28%,color-mix(in srgb,var(--viz-series-1) 32%,var(--background)));border-radius:16px;padding:28px}
+#iptv-prototype .actions{display:flex;flex-wrap:wrap;gap:10px}
+#iptv-prototype .episodes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+#iptv-prototype .episode{padding:14px;min-height:100px}
+#iptv-prototype .form-stack{display:grid;gap:12px;max-width:720px}
+#iptv-prototype .field{padding:16px;color:var(--muted-foreground)}
+#iptv-prototype .settings-grid{display:grid;gap:10px}
+#iptv-prototype .setting-row{padding:16px;display:flex;justify-content:space-between;gap:12px}
+#iptv-prototype .status-wrap{display:grid;place-items:center;min-height:390px;text-align:center}
+#iptv-prototype .status-panel{padding:28px;max-width:520px;display:grid;justify-items:center;gap:12px}
+#iptv-prototype .spinner{width:42px;height:42px;border:4px solid var(--border);border-top-color:var(--primary);border-radius:50%}
+#iptv-prototype .progress{height:5px;border-radius:8px;background:var(--muted);overflow:hidden;width:100%}
+#iptv-prototype .progress span{display:block;height:100%;background:var(--primary);width:62%}
+#iptv-prototype .player{min-height:460px;border-radius:16px;background:linear-gradient(140deg,color-mix(in srgb,var(--viz-series-5) 42%,var(--background)),var(--background));display:grid;align-content:end;padding:26px}
+#iptv-prototype .player-controls{background:color-mix(in srgb,var(--background) 80%,transparent);border-radius:14px;padding:16px;display:grid;gap:10px}
+#iptv-prototype .kbd{padding:4px 7px;border:1px solid var(--border);border-radius:6px;color:var(--muted-foreground)}
+@media(max-width:720px){#iptv-prototype .choice-grid,#iptv-prototype .two-col,#iptv-prototype .live-grid{grid-template-columns:1fr}#iptv-prototype .cards{grid-template-columns:repeat(2,1fr)}#iptv-prototype .grid-posters{grid-template-columns:repeat(3,1fr)}#iptv-prototype .episodes{grid-template-columns:repeat(2,1fr)}#iptv-prototype .screen{padding:18px}.tv-shell{min-height:auto}}
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('iptv-prototype');
+  const shell = root.querySelector('#tv-shell');
+  const pageSelect = root.querySelector('#page-select');
+  const stateSelect = root.querySelector('#state-select');
+
+  const pages = {
+    onboarding: {label:'Xtream setup', states:['default','validating','invalid credentials','server unavailable']},
+    sync: {label:'Initial synchronization', states:['loading','partial success','failed','complete']},
+    hub: {label:'Starting page', states:['Live TV focused','Movies & TV Shows focused','offline','subscription expired']},
+    live: {label:'Live TV browser', states:['default','channel focused','EPG unavailable','empty','offline']},
+    player: {label:'Live player', states:['controls hidden','controls visible','buffering','stream failed']},
+    ondemand: {label:'Movies & TV Shows home', states:['default','content focused','loading','empty','offline']},
+    catalog: {label:'Movies / TV Shows catalog', states:['default','poster focused','searching','no results','loading']},
+    details: {label:'Movie / TV show details', states:['movie','TV show','metadata unavailable','loading']},
+    vodplayer: {label:'Movie / episode player', states:['playing','paused','seeking','subtitles menu','playback failed']},
+    search: {label:'Search', states:['empty query','results','no results','keyboard focused']},
+    settings: {label:'Shared Settings', states:['account','synchronization','playback','parental controls','storage','diagnostics']}
+  };
+
+  const top = (title='Streamline') => `<div class="top"><div class="brand"><span class="mark">▶</span>${title}</div><div class="settings">⚙ Settings</div></div>`;
+  const status = (icon,title,body,action='Try again') => `<div class="screen">${top()}<div class="status-wrap"><div class="status-panel"><div style="font-size:36px">${icon}</div><h2>${title}</h2><p class="sub">${body}</p>${action?`<button class="btn btn-primary">${action}</button>`:''}</div></div></div>`;
+  const loading = (title,body) => `<div class="screen">${top()}<div class="status-wrap"><div class="status-panel"><div class="spinner"></div><h2>${title}</h2><p class="sub">${body}</p><div class="progress"><span></span></div></div></div></div>`;
+
+  function renderOnboarding(state){
+    if(state==='validating') return loading('Checking your account','Connecting securely and validating the subscription.');
+    if(state==='invalid credentials') return status('!','We could not sign in','Check the server URL, username and password.');
+    if(state==='server unavailable') return status('↻','Server unavailable','The service did not respond. Your details have not been saved.');
+    return `<div class="screen">${top('Connect your service')}<div><div class="hero-title">Enter your Xtream information</div><p class="sub">Your account information stays on this TV.</p></div><div class="form-stack"><div class="field">Account name (optional)</div><div class="field">Server URL</div><div class="field">Username</div><div class="field">Password ••••••••</div><div class="actions"><button class="btn btn-primary">Connect</button><button class="btn">Cancel</button></div></div></div>`;
+  }
+
+  function renderSync(state){
+    if(state==='loading') return loading('Preparing your library','Loading Live TV, guide, movies and TV shows.');
+    if(state==='failed') return status('!','Synchronization failed','Nothing was deleted. Check the connection and try again.');
+    if(state==='complete') return status('✓','Everything is ready','Your content is available on this TV.','Continue');
+    return status('△','Live TV is ready','Movies are ready. TV shows could not be refreshed, so cached content will be used.','Continue');
+  }
+
+  function renderHub(state){
+    if(state==='offline') return status('⌁','You are offline','Reconnect to open Live TV. Cached movie and TV show information remains available.');
+    if(state==='subscription expired') return status('!','Subscription expired','Update your service account, then refresh the account status.','Open Settings');
+    const right=state==='Movies & TV Shows focused';
+    return `<div class="screen">${top()}<div class="hero-title">What would you like to watch?</div><div class="choice-grid"><div class="choice ${right?'':'selected'}"><div class="art">▣ ⚽ ◇</div><div class="choice-copy"><strong>Live TV</strong><span class="sub">Channels, guide and what’s on now</span></div></div><div class="choice ${right?'selected':''}"><div class="art">◉ ✦ ▷</div><div class="choice-copy"><strong>Movies & TV Shows</strong><span class="sub">Your library, favorites and continue watching</span></div></div></div></div>`;
+  }
+
+  function renderLive(state){
+    if(state==='offline') return status('⌁','Live TV is offline','Reconnect to watch channels.');
+    if(state==='empty') return status('□','No channels found','Refresh the account or check the service subscription.','Refresh');
+    const epg=state==='EPG unavailable';
+    return `<div class="screen">${top('Live TV')}<div class="live-grid"><div class="side"><div class="nav-item active">Favorites</div><div class="nav-item">All Channels</div><div class="nav-item">News</div><div class="nav-item">Sports</div><div class="nav-item">Kids</div></div><div class="channels">${['World Network','News 24','Sport Arena','Nature World'].map((x,i)=>`<div class="channel ${i===(state==='channel focused'?1:0)?'selected':''}"><b>${101+i}</b><span>${x}<br><span class="sub">${epg?'Program information unavailable':'Now playing'}</span></span></div>`).join('')}</div><div class="preview"><span class="viz-badge">LIVE</span><h2>${epg?'World Network':'World Report'}</h2><p class="sub">${epg?'Guide information is temporarily unavailable.':'18:00–19:00 · Global news and analysis'}</p></div></div></div>`;
+  }
+
+  function renderPlayer(state, vod=false){
+    if(state==='buffering') return loading('Buffering','The stream is taking longer than expected.');
+    if(state==='stream failed'||state==='playback failed') return status('!','Playback failed','The source is unavailable or the TV cannot decode this format.');
+    const overlay=state!=='controls hidden';
+    const title=vod?'Northern Signal · S2 E4':'World Network · World Report';
+    return `<div class="screen"><div class="player"><div><span class="viz-badge">${vod?'EPISODE':'LIVE'}</span><h2>${title}</h2>${overlay?`<div class="player-controls"><div class="progress"><span></span></div><div class="top"><span>${state==='paused'?'▶ Play':'❚❚ Pause'} &nbsp; ${state==='seeking'?'Seeking 00:42:16':'Audio · Subtitles'}</span><span>${vod?'42:16 / 50:00':'18:24'}</span></div>${state==='subtitles menu'?'<div class="viz-row"><button class="btn btn-primary">English</button><button class="btn">Off</button><button class="btn">Style</button></div>':''}</div>`:''}</div></div></div>`;
+  }
+
+  function renderOnDemand(state){
+    if(state==='loading') return loading('Updating your library','Existing content remains available.');
+    if(state==='empty') return status('□','Your library is empty','No movies or TV shows were returned by the service.','Refresh');
+    if(state==='offline') return status('⌁','Offline mode','Browse cached information. Playback requires a connection.','Continue offline');
+    const focused=state==='content focused';
+    return `<div class="screen">${top('Movies & TV Shows')}<div class="two-col"><div class="side"><div class="nav-item active">Home</div><div class="nav-item">Movies</div><div class="nav-item">TV Shows</div><div class="nav-item">Search</div><div class="nav-item">My List</div><div class="nav-item">Settings</div></div><div class="content"><div><h1>The Last Horizon</h1><p class="sub">2026 · 2h 08m · TMDB 7.8</p><div class="actions"><button class="btn btn-primary">Play</button><button class="btn">More Info</button></div></div><div class="rows">${['Continue Watching','Recently Added Movies','Recently Added TV Shows','My List'].map((r,ri)=>`<div class="shelf"><b>${r}</b><div class="cards">${Array.from({length:5},(_,i)=>`<div class="poster ${focused&&ri===0&&i===1?'selected':''}">Title ${ri*5+i+1}</div>`).join('')}</div></div>`).join('')}</div></div></div></div>`;
+  }
+
+  function renderCatalog(state){
+    if(state==='loading') return loading('Loading titles','Reading the local catalog.');
+    if(state==='no results') return status('⌕','No results','Try a different title or clear Favorites only.','Clear search');
+    return `<div class="screen">${top('Movies')}<div class="top"><h1>Movies</h1><div class="actions"><button class="btn">⌕ Search</button><button class="btn">Recently Added ▾</button><button class="btn">Favorites only</button></div></div>${state==='searching'?'<div class="field">Search: northern signal</div>':''}<div class="grid-posters">${Array.from({length:18},(_,i)=>`<div class="poster ${state==='poster focused'&&i===0?'selected':''}">Movie ${i+1}</div>`).join('')}</div></div>`;
+  }
+
+  function renderDetails(state){
+    if(state==='loading') return loading('Loading details','Checking local metadata and artwork.');
+    const missing=state==='metadata unavailable';
+    const tv=state==='TV show';
+    return `<div class="screen">${top()}<div class="details"><div><div class="hero-title">${tv?'Northern Signal':'Strung'}</div><p class="sub">${missing?'Additional information is unavailable. You can still play this title.':tv?'2026 · 3 Seasons · TMDB 8.2':'2026 · 1h 59m · Mystery · Thriller · TMDB 7.7'}</p></div><div class="actions"><button class="btn btn-primary">${tv?'Resume S2 E4':'Play'}</button><button class="btn">My List</button></div>${tv?`<div><h3>Season 2</h3><div class="episodes">${['Contact Lost','Whiteout','Beneath the Ice','Echoes'].map((e,i)=>`<div class="episode ${i===3?'selected':''}"><b>${i+1}. ${e}</b><br><span class="sub">${47+i} min</span></div>`).join('')}</div></div>`:''}</div></div>`;
+  }
+
+  function renderSearch(state){
+    if(state==='no results') return status('⌕','No matching titles','Check the spelling or try fewer words.','Clear search');
+    const results=state==='results';
+    return `<div class="screen">${top('Search')}<div class="field ${state==='keyboard focused'?'selected':''}">⌕ ${state==='empty query'?'Search movies and TV shows':'northern signal'}</div>${results?`<div class="grid-posters">${Array.from({length:6},(_,i)=>`<div class="poster ${i===0?'selected':''}">Result ${i+1}</div>`).join('')}</div>`:'<div class="status-wrap"><p class="sub">Search your unified movie and TV show library.</p></div>'}</div>`;
+  }
+
+  function renderSettings(state){
+    const labels=['account','synchronization','playback','parental controls','storage','diagnostics'];
+    const details={account:[['Subscription status','Active'],['Expires','31 Dec 2026'],['Server','Connected']],synchronization:[['Live TV','Updated'],['EPG','2 hours ago'],['Movies & TV Shows','Updated']],playback:[['Live buffer','Balanced'],['Auto-play next episode','On'],['Preferred quality','Best available']],'parental controls':[['PIN lock','On'],['Adult content','Locked'],['Hidden channels','12']],storage:[['Catalog database','148 MB'],['Artwork cache','512 MB'],['Available storage','3.2 GB']],diagnostics:[['Last sync','Successful'],['Last playback error','None'],['Local log','Ready to export']]};
+    return `<div class="screen">${top('Settings')}<div class="two-col"><div class="side">${labels.map(x=>`<div class="nav-item ${x===state?'active':''}">${x.replace(/\b\w/g,c=>c.toUpperCase())}</div>`).join('')}</div><div class="content"><h1>${state.replace(/\b\w/g,c=>c.toUpperCase())}</h1><div class="settings-grid">${details[state].map(x=>`<div class="setting-row"><b>${x[0]}</b><span>${x[1]}</span></div>`).join('')}</div></div></div></div>`;
+  }
+
+  function render(){
+    const page=pageSelect.value; const state=stateSelect.value;
+    if(page==='onboarding') shell.innerHTML=renderOnboarding(state);
+    else if(page==='sync') shell.innerHTML=renderSync(state);
+    else if(page==='hub') shell.innerHTML=renderHub(state);
+    else if(page==='live') shell.innerHTML=renderLive(state);
+    else if(page==='player') shell.innerHTML=renderPlayer(state,false);
+    else if(page==='ondemand') shell.innerHTML=renderOnDemand(state);
+    else if(page==='catalog') shell.innerHTML=renderCatalog(state);
+    else if(page==='details') shell.innerHTML=renderDetails(state);
+    else if(page==='vodplayer') shell.innerHTML=renderPlayer(state,true);
+    else if(page==='search') shell.innerHTML=renderSearch(state);
+    else shell.innerHTML=renderSettings(state);
+  }
+
+  Object.entries(pages).forEach(([key,p])=>pageSelect.add(new Option(p.label,key)));
+  function setStates(){stateSelect.innerHTML='';pages[pageSelect.value].states.forEach(s=>stateSelect.add(new Option(s,s)));render();}
+  pageSelect.addEventListener('change',setStates);stateSelect.addEventListener('change',render);
+  setStates();
+})();
+</script>

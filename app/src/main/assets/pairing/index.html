@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect OH</title>
+  <link rel="stylesheet" href="/link.css">
+</head>
+<body>
+<main>
+  <header><div class="mark">▶</div><div class="brand">OH</div></header>
+  <section class="card" id="form-card">
+    <h1>Connect your TV</h1>
+    <p>Keep this phone on the same Wi-Fi as your TV. Enter the one-time code and the exact details supplied by your provider.</p>
+    <form id="pair-form">
+      <label for="code">TV CODE</label><input id="code" autocomplete="one-time-code" maxlength="7" required placeholder="M7K-4P2">
+      <label for="displayName">ACCOUNT NAME</label><input id="displayName" maxlength="80" placeholder="Living Room TV">
+      <label for="serverUrl">SERVER URL</label><input id="serverUrl" type="url" autocomplete="url" required placeholder="https://line.provider.tv:8080">
+      <label for="username">USERNAME</label><input id="username" autocomplete="username" required>
+      <label for="password">PASSWORD</label><input id="password" type="password" autocomplete="current-password" required>
+      <button id="submit" type="submit">Connect TV</button>
+      <div class="status" id="status" role="status"></div>
+    </form>
+    <div class="secure">🔒 Details are encrypted for this TV before being sent across your local network.</div>
+  </section>
+  <section class="card success hidden" id="success-card"><div class="success-icon">✓</div><strong>Details sent securely</strong><p>Your TV is verifying the provider and preparing your library. You may close this page.</p></section>
+</main>
+<script src="/link.js" defer></script>
+</body>
+</html>
