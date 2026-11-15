@@ -7,6 +7,7 @@ import androidx.room.withTransaction
 import com.oh.tv.data.local.AccountEntity
 import com.oh.tv.data.local.LiveCategoryEntity
 import com.oh.tv.data.local.LiveChannelEntity
+import com.oh.tv.data.local.VodCategoryEntity
 import com.oh.tv.data.local.MovieEntity
 import com.oh.tv.data.local.OhDatabase
 import com.oh.tv.data.local.FavoriteEntity
@@ -135,10 +136,12 @@ class OhRepository(
         }
         delay(350)
         results += scope(SyncScopes.MOVIES, { database.catalogDao().movieCount(account.id) }) {
+            syncVodCategories(account, credentials, "movie", "get_vod_categories")
             syncMovies(account, credentials) { onProgress(SyncProgress(SyncScopes.MOVIES, it, SyncState.Running)) }
         }
         delay(350)
         results += scope(SyncScopes.TV_SHOWS, { database.catalogDao().seriesCount(account.id) }) {
+            syncVodCategories(account, credentials, "series", "get_series_categories")
             syncSeries(account, credentials) { onProgress(SyncProgress(SyncScopes.TV_SHOWS, it, SyncState.Running)) }
         }
         SyncSummary(results)
@@ -154,17 +157,19 @@ class OhRepository(
         catalogPagingConfig(),
     ) { database.catalogDao().liveChannels(accountId, categoryId) }.flow
 
-    fun movies(accountId: String, genre: String? = null): Flow<PagingData<MovieEntity>> = Pager(
+    fun movies(accountId: String, categoryId: String? = null): Flow<PagingData<MovieEntity>> = Pager(
         catalogPagingConfig(),
-    ) { database.catalogDao().movies(accountId, genre) }.flow
+    ) { database.catalogDao().movies(accountId, categoryId) }.flow
 
     fun movieGenreCounts(accountId: String): Flow<Map<String, Int>> = combine(
         BrowseMovieGenres.map { genre -> database.catalogDao().observeMovieGenreCount(accountId, genre) },
     ) { counts -> BrowseMovieGenres.zip(counts.toList()).toMap() }
 
-    fun series(accountId: String): Flow<PagingData<SeriesEntity>> = Pager(
+    fun vodCategories(accountId: String, kind: String) = database.catalogDao().observeVodCategories(accountId, kind)
+
+    fun series(accountId: String, categoryId: String? = null): Flow<PagingData<SeriesEntity>> = Pager(
         catalogPagingConfig(),
-    ) { database.catalogDao().series(accountId) }.flow
+    ) { database.catalogDao().series(accountId, categoryId) }.flow
 
     fun favoriteMovies(accountId: String) = database.catalogDao().favoriteMovies(accountId)
     fun favoriteSeries(accountId: String) = database.catalogDao().favoriteSeries(accountId)
@@ -176,6 +181,7 @@ class OhRepository(
         database.withTransaction {
             database.catalogDao().deleteAllLiveCategories(account.id)
             database.catalogDao().deleteAllLiveChannels(account.id)
+            database.catalogDao().deleteAllVodCategories(account.id)
             database.catalogDao().deleteAllMovies(account.id)
             database.catalogDao().deleteAllSeries(account.id)
             database.catalogDao().deleteAllEpisodes(account.id)
@@ -366,6 +372,21 @@ class OhRepository(
         return count
     }
 
+    private suspend fun syncVodCategories(account: AccountEntity, credentials: XtreamCredentials, kind: String, action: String) {
+        val generation = System.currentTimeMillis()
+        var order = 0
+        xtream.openArray(account.baseUrl, credentials.username, credentials.password, action).use { body ->
+            StreamingArrayParser.forEachBatchSuspending(body.source()) { batch ->
+                val mapped = batch.mapNotNull { raw ->
+                    val id = raw["category_id"].asString() ?: return@mapNotNull null
+                    VodCategoryEntity(account.id, kind, id, raw["category_name"].asString() ?: "Untitled", order++, generation)
+                }
+                database.withTransaction { database.catalogDao().upsertVodCategories(mapped) }
+            }
+        }
+        database.catalogDao().deleteStaleVodCategories(account.id, kind, generation)
+    }
+
     private suspend fun syncMovies(account: AccountEntity, credentials: XtreamCredentials, progress: (Int) -> Unit): Int {
         val generation = System.currentTimeMillis()
         var count = 0
@@ -381,6 +402,7 @@ class OhRepository(
                         providerIconUrl = raw["stream_icon"].asString(),
                         providerRating = raw["rating"].asDouble(),
                         addedAt = raw["added"].asLong(),
+                        categoryId = raw["category_id"].asString(),
                         tmdbId = raw["tmdb_id"].asLong(),
                         overview = null,
                         releaseDate = null,
@@ -436,6 +458,7 @@ class OhRepository(
                         providerIconUrl = raw["cover"].asString(),
                         providerRating = raw["rating"].asDouble(),
                         lastModified = raw["last_modified"].asLong(),
+                        categoryId = raw["category_id"].asString(),
                         tmdbId = raw["tmdb_id"].asLong(),
                         overview = raw["plot"].asString(),
                         releaseDate = raw["releaseDate"].asString(),
