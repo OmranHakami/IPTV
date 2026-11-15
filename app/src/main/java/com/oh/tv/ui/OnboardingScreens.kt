@@ -441,7 +441,8 @@ fun ExperienceChoiceScreen(counts: CatalogCounts, onMovies: () -> Unit, onShows:
 
 @Composable
 private fun ExperienceCard(icon: String, count: String, title: String, description: String, action: String, onClick: () -> Unit, modifier: Modifier, focusRequester: FocusRequester? = null, accent: Color, primary: Boolean = false) {
-    FocusSurface(onClick, modifier, Panel, Color(0xFF1B2638), focusRequester = focusRequester, borderColor = if (primary) Peach else null) {
+    var isFocused by remember { mutableStateOf(false) }
+    FocusSurface(onClick, modifier.onFocusChanged { isFocused = it.hasFocus }, Panel, Color(0xFF1B2638), focusRequester = focusRequester, borderColor = if (isFocused) Peach else null) {
         Column(Modifier.fillMaxSize().padding(26.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(58.dp).clip(RoundedCornerShape(18.dp)).background(accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Text(icon, color = accent, fontSize = 27.sp) }
@@ -452,13 +453,13 @@ private fun ExperienceCard(icon: String, count: String, title: String, descripti
             Text(description, color = Quiet, fontSize = 13.sp, lineHeight = 19.sp)
             Box(
                 Modifier.fillMaxWidth().height(36.dp).clip(RoundedCornerShape(15.dp))
-                    .background(if (primary) Brush.horizontalGradient(listOf(Peach, Color(0xFFFF936C))) else SolidColor(Color(0xFF1C2635)))
-                    .border(if (primary) 2.dp else 1.dp, if (primary) Color(0xFFFFF1D8) else Color(0xFF43526B), RoundedCornerShape(15.dp)),
+                    .background(if (isFocused) Brush.horizontalGradient(listOf(Peach, Color(0xFFFF936C))) else SolidColor(Color(0xFF1C2635)))
+                    .border(if (isFocused) 2.dp else 1.dp, if (isFocused) Color(0xFFFFF1D8) else Color(0xFF43526B), RoundedCornerShape(15.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(action, color = if (primary) Color(0xFF25150D) else Color(0xFFD8E1F0), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("→", color = if (primary) Color(0xFF25150D) else Color(0xFF9DB2D1), fontWeight = FontWeight.Bold)
+                    Text(action, color = if (isFocused) Color(0xFF25150D) else Color(0xFFD8E1F0), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("→", color = if (isFocused) Color(0xFF25150D) else Color(0xFF9DB2D1), fontWeight = FontWeight.Bold)
                 }
             }
         }
