@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.oh.tv.data.OhRepository
 import com.oh.tv.data.local.OhDatabase
+import com.oh.tv.data.local.MIGRATION_2_3
 import com.oh.tv.data.remote.PlaybackUrlFactory
 import com.oh.tv.data.remote.LocalPairingServer
 import com.oh.tv.data.remote.TmdbGateway
@@ -12,6 +13,7 @@ import com.oh.tv.security.CredentialVault
 
 class AppContainer(context: Context) {
     val database: OhDatabase = Room.databaseBuilder(context, OhDatabase::class.java, "oh.db")
+        .addMigrations(MIGRATION_2_3)
         .fallbackToDestructiveMigration()
         .fallbackToDestructiveMigrationOnDowngrade()
         .build()
