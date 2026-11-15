@@ -32,6 +32,7 @@ import com.oh.tv.security.XtreamCredentials
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -114,6 +115,8 @@ class OhRepository(
                     elapsedMs = finishedAt - startedAt,
                     lastSuccessAtMs = finishedAt,
                 )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
                 val retained = runCatching { cachedCount() }.getOrDefault(0)
                 SyncProgress(
