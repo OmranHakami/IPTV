@@ -12,7 +12,7 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use(::load)
 }
 
-val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
+val subtitleApiKey = localProperties.getProperty("OPENSUBTITLES_API_KEY")\n    ?: providers.gradleProperty("OPENSUBTITLES_API_KEY").orNull\n    ?: ""\n\nval tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
     ?: providers.gradleProperty("TMDB_API_KEY").orNull
     ?: ""
 
@@ -32,7 +32,7 @@ android {
             "TMDB_API_KEY",
             "\"${tmdbApiKey.replace("\"", "\\\"")}\"",
         )
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "OPENSUBTITLES_API_KEY", "\\\"${subtitleApiKey.replace("\\\"", "\\\\\\\"")}\\\"")\n        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     flavorDimensions += "device"
