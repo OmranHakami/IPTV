@@ -23,7 +23,6 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
-import java.util.concurrent.Semaphore
 
 data class LocalPairingSession(
     val code: String,
@@ -35,7 +34,7 @@ class LocalPairingServer(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val random = SecureRandom()
-    private val connectionSlots = Semaphore(MAX_CONCURRENT_CLIENTS)
+    private val connectionSlots = PairingConnectionLimiter(MAX_CONCURRENT_CLIENTS)
     private var socket: ServerSocket? = null
     private var activeCode: String? = null
     private var modulus: String = ""
