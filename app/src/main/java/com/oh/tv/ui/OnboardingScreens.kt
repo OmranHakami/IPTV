@@ -420,7 +420,7 @@ private fun SyncRow(label: String, progress: SyncProgress?) {
 }
 
 @Composable
-fun ExperienceChoiceScreen(counts: CatalogCounts, onMovies: () -> Unit, onLive: () -> Unit, onSettings: () -> Unit) {
+fun ExperienceChoiceScreen(counts: CatalogCounts, onMovies: () -> Unit, onShows: () -> Unit, onLive: () -> Unit, onSettings: () -> Unit) {
     val moviesFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { moviesFocus.requestFocus() }
     DesignedScreen {
@@ -431,8 +431,9 @@ fun ExperienceChoiceScreen(counts: CatalogCounts, onMovies: () -> Unit, onLive: 
                 Text("●  LIBRARY READY", color = Success, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
             }
             Row(Modifier.fillMaxSize().padding(bottom = 20.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                ExperienceCard("◉", "${formatCount(counts.titles)} TITLES", "Movies & TV Shows", "Browse your library, favorites and continue watching with enriched artwork and details.", "Open movies & shows", onMovies, Modifier.weight(1f), moviesFocus, Peach, primary = true)
-                ExperienceCard("▦", "${formatCount(counts.liveChannels)} CHANNELS", "Live TV Channels", "Jump into live channels, browse categories and open the electronic program guide.", "Open live TV", onLive, Modifier.weight(1f), accent = ChoiceBlue)
+                ExperienceCard("◉", "${formatCount(counts.movies)} MOVIES", "Movies", "Browse films organized by your IPTV provider categories.", "Open movies", onMovies, Modifier.weight(1f), moviesFocus, Peach, primary = true)
+                ExperienceCard("▤", "${formatCount(counts.series)} SHOWS", "TV Shows", "Browse series and episodes using your IPTV provider categories.", "Open TV shows", onShows, Modifier.weight(1f), accent = ChoiceBlue)
+                ExperienceCard("▦", "${formatCount(counts.liveChannels)} CHANNELS", "Live TV", "Browse live channels and the electronic program guide.", "Open live TV", onLive, Modifier.weight(1f), accent = ChoiceBlue)
             }
         }
     }
