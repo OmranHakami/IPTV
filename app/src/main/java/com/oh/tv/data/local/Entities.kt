@@ -53,6 +53,20 @@ data class LiveChannelEntity(
 )
 
 @Entity(
+    tableName = "vod_categories",
+    primaryKeys = ["accountId", "kind", "providerId"],
+    indices = [Index("accountId", "kind")],
+)
+data class VodCategoryEntity(
+    val accountId: String,
+    val kind: String,
+    val providerId: String,
+    val name: String,
+    val sortOrder: Int,
+    val syncGeneration: Long,
+)
+
+@Entity(
     tableName = "movies",
     primaryKeys = ["accountId", "providerId"],
     indices = [Index("accountId", "name"), Index("accountId", "addedAt")],
@@ -65,6 +79,7 @@ data class MovieEntity(
     val providerIconUrl: String?,
     val providerRating: Double?,
     val addedAt: Long?,
+    val categoryId: String? = null,
     val tmdbId: Long?,
     val overview: String?,
     val releaseDate: String?,
@@ -90,6 +105,7 @@ data class SeriesEntity(
     val providerIconUrl: String?,
     val providerRating: Double?,
     val lastModified: Long?,
+    val categoryId: String? = null,
     val tmdbId: Long?,
     val overview: String?,
     val releaseDate: String?,
