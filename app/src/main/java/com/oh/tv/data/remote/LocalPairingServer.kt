@@ -102,9 +102,11 @@ class LocalPairingServer(context: Context) {
             val parts = it.split('=', limit = 2)
             if (parts.size == 2) URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts[1], "UTF-8") else null
         }.toMap()
-        val contentLength = lines.firstOrNull { it.startsWith("Content-Length:", true) }
-            ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
-        if (contentLength !in 0..MAX_BODY_BYTES) return respond(output, 413, "text/plain", byteArrayOf())
+        val contentLength = when (val length = HttpContentLength.parse(lines.drop(1), method == "POST")) {
+            is HttpContentLength.Result.Valid -> length.value
+            HttpContentLength.Result.Invalid -> return respond(output, 400, "text/plain", byteArrayOf())
+            HttpContentLength.Result.TooLarge -> return respond(output, 413, "text/plain", byteArrayOf())
+        }
         val body = ByteArray(contentLength)
         var read = 0
         while (read < contentLength) {
