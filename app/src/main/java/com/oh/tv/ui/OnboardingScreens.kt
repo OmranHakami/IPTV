@@ -457,10 +457,13 @@ private fun ExperienceCard(icon: String, count: String, title: String, descripti
                     .border(if (isFocused) 2.dp else 1.dp, if (isFocused) Color(0xFFFFF1D8) else Color(0xFF43526B), RoundedCornerShape(15.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(action, color = if (isFocused) Color(0xFF25150D) else Color(0xFFD8E1F0), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("→", color = if (isFocused) Color(0xFF25150D) else Color(0xFF9DB2D1), fontWeight = FontWeight.Bold)
-                }
+                Text(
+                    action,
+                    color = if (isFocused) Color(0xFF25150D) else Color(0xFFD8E1F0),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
             }
         }
     }
