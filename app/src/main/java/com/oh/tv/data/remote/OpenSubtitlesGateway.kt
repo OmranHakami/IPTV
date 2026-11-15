@@ -9,6 +9,8 @@ import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
+import java.io.InputStream
+import java.io.ByteArrayOutputStream
 
 /** OpenSubtitles.com API; callers must supply their own API key. */
 class OpenSubtitlesGateway(
@@ -63,10 +65,35 @@ class OpenSubtitlesGateway(
         client.newCall(Request.Builder().url(uri).build()).execute().use { response ->
             check(response.isSuccessful) { "Subtitle file download failed: HTTP ${response.code}" }
             val body = requireNotNull(response.body)
-            check(body.contentLength() <= 2_000_000L) { "Subtitle file too large" }
-            val bytes = body.bytes()
-            check(bytes.size <= 2_000_000) { "Subtitle file too large" }
-            bytes
+            check(body.contentLength() <= MAX_SUBTITLE_BYTES) { "Subtitle file too large" }
+            readBoundedSubtitle(body.byteStream(), MAX_SUBTITLE_BYTES)
+
         }
     }
+}
+
+private const val MAX_SUBTITLE_BYTES = 2_000_000L
+
+/** Enforces the limit while streaming, including unknown or dishonest Content-Length. */
+internal fun readBoundedSubtitle(input: InputStream, maxBytes: Long): ByteArray {
+    require(maxBytes >= 0)
+    val output = ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var total = 0L
+    while (true) {
+        val count = input.read(buffer)
+        if (count < 0) break
+        if (count == 0) {
+            val single = input.read()
+            if (single < 0) break
+            check(total < maxBytes) { "Subtitle file too large" }
+            output.write(single)
+            total++
+            continue
+        }
+        check(count.toLong() <= maxBytes - total) { "Subtitle file too large" }
+        output.write(buffer, 0, count)
+        total += count
+    }
+    return output.toByteArray()
 }
