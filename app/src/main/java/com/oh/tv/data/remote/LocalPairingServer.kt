@@ -23,6 +23,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.concurrent.Semaphore
 
 data class LocalPairingSession(
     val code: String,
@@ -34,6 +35,7 @@ class LocalPairingServer(context: Context) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val random = SecureRandom()
+    private val connectionSlots = Semaphore(MAX_CONCURRENT_CLIENTS)
     private var socket: ServerSocket? = null
     private var activeCode: String? = null
     private var modulus: String = ""
@@ -82,7 +84,17 @@ class LocalPairingServer(context: Context) {
     private suspend fun acceptLoop(server: ServerSocket) {
         while (scope.isActive && !server.isClosed) {
             val client = runCatching { server.accept() }.getOrNull() ?: break
-            scope.launch { client.use(::handleClient) }
+            if (!connectionSlots.tryAcquire()) {
+                client.close()
+                continue
+            }
+            scope.launch {
+                try {
+                    client.use(::handleClient)
+                } finally {
+                    connectionSlots.release()
+                }
+            }
         }
     }
 
@@ -186,6 +198,7 @@ class LocalPairingServer(context: Context) {
     private companion object {
         const val SESSION_MS = 5 * 60 * 1_000L
         const val LOCAL_PORT = 8_765
+        const val MAX_CONCURRENT_CLIENTS = 8
         const val MAX_HEADER_BYTES = 16 * 1_024
         const val MAX_BODY_BYTES = 32 * 1_024
         const val CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
