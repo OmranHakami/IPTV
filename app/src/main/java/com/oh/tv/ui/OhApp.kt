@@ -404,8 +404,6 @@ private fun MovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
     val selectedCategory by viewModel.selectedMovieCategory.collectAsStateWithLifecycle()
     val categories by viewModel.movieCategories.collectAsStateWithLifecycle()
     var genreOpen by remember { mutableStateOf(false) }
-    val genreFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { genreFocus.requestFocus() }
     BrowseScreen {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             MediaNavigationBar(
