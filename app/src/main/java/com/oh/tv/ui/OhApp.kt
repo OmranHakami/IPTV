@@ -177,7 +177,7 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.Search -> SearchScreen(state, viewModel::search, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
-        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> MovieSubtitle(movie.name, movie.releaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
+        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> MovieSubtitle(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
     }
 }
@@ -392,8 +392,8 @@ private fun OnDemandScreen(
 @Composable private fun MovieShelfCard(movie: MovieEntity, click: () -> Unit) {
     FocusSurface(click, Modifier.width(120.dp).height(88.dp), Surface, SurfaceLifted) {
         Box(Modifier.fillMaxSize()) {
-            AsyncImage(movie.providerIconUrl, movie.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Text(movie.name, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            AsyncImage(movie.providerIconUrl, movie.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Text(movie.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(8.dp))
         }
     }
@@ -482,9 +482,9 @@ private fun SeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
 @Composable private fun MovieCard(movie: MovieEntity, click: () -> Unit) {
     FocusSurface(click, Modifier.aspectRatio(0.68f), Surface, SurfaceLifted) {
         Box(Modifier.fillMaxSize()) {
-            AsyncImage(movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: movie.providerIconUrl, movie.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            AsyncImage(movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: movie.providerIconUrl, movie.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(10.dp)) {
-                Text(movie.name, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                Text(movie.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
             }
         }
     }
@@ -493,9 +493,9 @@ private fun SeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
 @Composable private fun SeriesCard(show: SeriesEntity, click: () -> Unit) {
     FocusSurface(click, Modifier.aspectRatio(0.68f), Surface, SurfaceLifted) {
         Box(Modifier.fillMaxSize()) {
-            AsyncImage(show.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: show.providerIconUrl, show.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            AsyncImage(show.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: show.providerIconUrl, show.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(10.dp)) {
-                Text(show.name, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                Text(show.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
             }
         }
     }
@@ -509,15 +509,15 @@ private fun MovieDetailsScreen(movie: MovieEntity, favorite: Boolean, message: S
             Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                 OhTopBar(onHome = back)
                 Spacer(Modifier.weight(1f))
-                Text(movie.name, color = WarmWhite, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
+                Text(movie.displayName, color = WarmWhite, fontSize = 28.sp, fontWeight = FontWeight.SemiBold)
                 MetadataLine(listOfNotNull(
-                    movie.releaseDate?.take(4),
+                    movie.displayReleaseDate?.take(4),
                     movie.runtimeMinutes?.let { "${it} min" },
                     movie.genres,
                     movie.tmdbRating?.let { "TMDB %.1f".format(it) }
                         ?: movie.providerRating?.let { "Rating %.1f".format(it) },
                 ).joinToString("  •  "))
-                Text(movie.overview ?: "Additional information is unavailable. You can still play this movie.", color = WarmWhite, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.fillMaxWidth(0.50f), maxLines = 4, overflow = TextOverflow.Ellipsis)
+                Text(movie.displayOverview ?: "Additional information is unavailable. You can still play this movie.", color = WarmWhite, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.fillMaxWidth(0.50f), maxLines = 4, overflow = TextOverflow.Ellipsis)
                 if (message != null) Text(message, color = ErrorRed)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { OhButton("▶  Play", play, primary = true); OhButton(if (favorite) "✓  In My List" else "＋  My List", toggleFavorite) }
             }
@@ -551,7 +551,7 @@ private fun SeriesDetailsScreen(
             )
             AsyncImage(
                 series.posterPath?.let { "https://image.tmdb.org/t/p/w780$it" } ?: series.providerIconUrl,
-                series.name,
+                series.displayName,
                 Modifier.fillMaxHeight().fillMaxWidth(0.41f),
                 contentScale = ContentScale.Crop,
                 alpha = 0.9f,
@@ -566,17 +566,17 @@ private fun SeriesDetailsScreen(
                 }
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
                     Column(Modifier.weight(0.40f).fillMaxHeight().padding(start = 52.dp, bottom = 34.dp), verticalArrangement = Arrangement.Bottom) {
-                        Text(series.name, color = WarmWhite, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(series.displayName, color = WarmWhite, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(7.dp))
                         MetadataLine(listOfNotNull(
-                            series.releaseDate?.take(4),
+                            series.displayReleaseDate?.take(4),
                             series.genres,
                             seasons.takeIf { it.isNotEmpty() }?.let { "${it.size} seasons" },
                             series.tmdbRating?.let { "TMDB %.1f".format(it) }
                                 ?: series.providerRating?.let { "Rating %.1f".format(it) },
                         ).joinToString("  •  "))
                         Spacer(Modifier.height(8.dp))
-                        Text(series.overview ?: "Show information is provided by your service.", color = WarmWhite, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                        Text(series.displayOverview ?: "Show information is provided by your service.", color = WarmWhite, fontSize = 11.sp, lineHeight = 15.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
                         Spacer(Modifier.height(12.dp))
                         continueEpisode?.let { episode ->
                             val progress = progressByEpisode[episode.providerId]
@@ -691,7 +691,7 @@ private fun SearchScreen(
                 items(state.searchSeries, key = { "s:${it.providerId}" }) { show ->
                     LaunchedEffect(show.accountId, show.providerId, show.metadataUpdatedAt) { loadSeries(show) }
                     FocusSurface({ openSeries(show) }, Modifier.width(120.dp).height(88.dp), Surface, SurfaceLifted) {
-                        Text(show.name, color = WarmWhite, modifier = Modifier.padding(12.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(show.displayName, color = WarmWhite, modifier = Modifier.padding(12.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
