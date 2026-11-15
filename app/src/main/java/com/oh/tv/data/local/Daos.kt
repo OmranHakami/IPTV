@@ -25,6 +25,18 @@ interface AccountDao {
 @Dao
 interface CatalogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertVodCategories(items: List<VodCategoryEntity>)
+
+    @Query("SELECT * FROM vod_categories WHERE accountId=:accountId AND kind=:kind ORDER BY sortOrder, name")
+    fun observeVodCategories(accountId: String, kind: String): Flow<List<VodCategoryEntity>>
+
+    @Query("DELETE FROM vod_categories WHERE accountId=:accountId AND kind=:kind AND syncGeneration != :generation")
+    suspend fun deleteStaleVodCategories(accountId: String, kind: String, generation: Long)
+
+    @Query("DELETE FROM vod_categories WHERE accountId=:accountId")
+    suspend fun deleteAllVodCategories(accountId: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertLiveCategories(items: List<LiveCategoryEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -45,14 +57,14 @@ interface CatalogDao {
     @Query("SELECT * FROM live_channels WHERE accountId = :accountId AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY number, name")
     fun liveChannels(accountId: String, categoryId: String?): PagingSource<Int, LiveChannelEntity>
 
-    @Query("SELECT * FROM movies WHERE accountId = :accountId AND (:genre IS NULL OR genres LIKE '%' || :genre || '%') ORDER BY COALESCE(addedAt, 0) DESC, name")
-    fun movies(accountId: String, genre: String?): PagingSource<Int, MovieEntity>
+    @Query("SELECT * FROM movies WHERE accountId = :accountId AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY COALESCE(addedAt, 0) DESC, name")
+    fun movies(accountId: String, categoryId: String?): PagingSource<Int, MovieEntity>
 
     @Query("SELECT * FROM movies WHERE accountId=:accountId AND providerId IN (:providerIds)")
     suspend fun moviesByIds(accountId: String, providerIds: List<String>): List<MovieEntity>
 
-    @Query("SELECT * FROM series WHERE accountId = :accountId ORDER BY COALESCE(lastModified, 0) DESC, name")
-    fun series(accountId: String): PagingSource<Int, SeriesEntity>
+    @Query("SELECT * FROM series WHERE accountId = :accountId AND (:categoryId IS NULL OR categoryId = :categoryId) ORDER BY COALESCE(lastModified, 0) DESC, name")
+    fun series(accountId: String, categoryId: String?): PagingSource<Int, SeriesEntity>
 
     @Query("SELECT * FROM series WHERE accountId=:accountId AND providerId IN (:providerIds)")
     suspend fun seriesByIds(accountId: String, providerIds: List<String>): List<SeriesEntity>
