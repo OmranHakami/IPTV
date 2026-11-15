@@ -41,7 +41,6 @@ android {
             "OPENSUBTITLES_API_KEY",
             "\"${subtitleApiKey.replace("\"", "\\\"")}\"",
         )
-        buildConfigField("String", "OPENSUBTITLES_API_KEY", "\\\"${subtitleApiKey.replace("\\\"", "\\\\\\\"")}\\\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
