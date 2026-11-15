@@ -55,7 +55,7 @@ import androidx.media3.common.MimeTypes
 import com.oh.tv.security.SubtitleCredentialStore
 import com.oh.tv.BuildConfig
 import com.oh.tv.data.remote.MovieSubtitleMatcher
-import com.oh.tv.data.remote.MovieSubtitle
+import com.oh.tv.data.remote.SubtitleMovie
 import com.oh.tv.data.remote.OpenSubtitlesGateway
 import com.oh.tv.data.remote.TmdbGateway
 import com.oh.tv.data.remote.MovieIdentityLookup
@@ -177,7 +177,7 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.Search -> SearchScreen(state, viewModel::search, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
         Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
-        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> MovieSubtitle(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
+        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
     }
 }
@@ -787,14 +787,14 @@ private fun SettingsScreen(state: OhUiState, back: () -> Unit, sync: () -> Unit,
 }
 
 @Composable
-private fun PlayerScreen(url: String, title: String, startPositionMs: Long, saveProgress: (Long, Long) -> Unit, subtitleMovie: MovieSubtitle? = null) {
+private fun PlayerScreen(url: String, title: String, startPositionMs: Long, saveProgress: (Long, Long) -> Unit, subtitleMovie: SubtitleMovie? = null) {
     val context = LocalContext.current
     var error by remember(url) { mutableStateOf<String?>(null) }
     var buffering by remember(url) { mutableStateOf(true) }
     val subtitleApi = remember(context) { OpenSubtitlesGateway(SubtitleCredentialStore(context).load().orEmpty()) }
     val tmdbApi = remember { TmdbGateway(BuildConfig.TMDB_API_KEY) }
     val matcher = remember { MovieSubtitleMatcher(subtitleApi, object : MovieIdentityLookup {
-        override suspend fun resolve(movie: MovieSubtitle) = tmdbApi.resolveSubtitleMovie(movie)
+        override suspend fun resolve(movie: SubtitleMovie) = tmdbApi.resolveSubtitleMovie(movie)
     }) }
     val coroutineScope = rememberCoroutineScope()
     var subtitleResults by remember(url) { mutableStateOf<List<SubtitleMatch>>(emptyList()) }
