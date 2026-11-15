@@ -52,6 +52,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
+import com.oh.tv.security.SubtitleCredentialStore
 import com.oh.tv.BuildConfig
 import com.oh.tv.data.remote.MovieSubtitleMatcher
 import com.oh.tv.data.remote.MovieSubtitle
@@ -716,22 +717,51 @@ private fun MyListScreen(
 
 @Composable
 private fun SettingsScreen(state: OhUiState, back: () -> Unit, sync: () -> Unit, remove: () -> Unit) {
+    val context = LocalContext.current
+    val credentialStore = remember(context) { SubtitleCredentialStore(context) }
+    var selectedTab by remember { mutableStateOf("Account") }
+    var subtitleKey by remember { mutableStateOf("") }
+    var keyConfigured by remember { mutableStateOf(credentialStore.isConfigured()) }
+    var keyStatus by remember { mutableStateOf<String?>(null) }
     Screen {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             OhTopBar("Settings", back)
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Column(Modifier.width(215.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Account", "Synchronization", "Playback", "Audio & Subtitles", "Parental Controls", "Live TV", "Storage", "Diagnostics", "Startup", "About & Credits").forEachIndexed { index, name ->
-                        MenuItem(name, index == 0) { }
+                    listOf("Account", "Synchronization", "Playback", "Audio & Subtitles", "Parental Controls", "Live TV", "Storage", "Diagnostics", "Startup", "About & Credits").forEach { name ->
+                        MenuItem(name, name == selectedTab) { selectedTab = name }
                     }
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingRow("Subscription status", state.account?.status ?: "Unavailable")
-                    SettingRow("Expires", state.account?.expiresAtEpochSeconds?.let { java.time.Instant.ofEpochSecond(it).toString().take(10) } ?: "Unknown")
-                    SettingRow("Server", state.account?.baseUrl?.substringAfter("://") ?: "Unavailable")
-                    OhButton("Refresh content", sync, Modifier.fillMaxWidth(), primary = true)
-                    OhButton("Remove account", remove, Modifier.fillMaxWidth())
-                    Text("This product can use TMDB data but is not endorsed or certified by TMDB.", color = Muted, fontSize = 13.sp)
+                    if (selectedTab == "Audio & Subtitles") {
+                        Text("OpenSubtitles API key", color = WarmWhite, fontSize = 19.sp)
+                        Text(if (keyConfigured) "Configured on this device" else "Not configured", color = Muted)
+                        OhTextField(subtitleKey, { subtitleKey = it }, "Enter a new API key", password = true)
+                        OhButton("Save API key", {
+                            if (subtitleKey.isNotBlank()) {
+                                try {
+                                    credentialStore.save(subtitleKey)
+                                    subtitleKey = ""
+                                    keyConfigured = true
+                                    keyStatus = "API key saved securely on this device"
+                                } catch (_: Exception) { keyStatus = "Could not save API key" }
+                            } else keyStatus = "Enter an API key first"
+                        }, Modifier.fillMaxWidth(), primary = true)
+                        OhButton("Remove API key", {
+                            credentialStore.save("")
+                            subtitleKey = ""
+                            keyConfigured = false
+                            keyStatus = "API key removed"
+                        }, Modifier.fillMaxWidth())
+                        keyStatus?.let { Text(it, color = Muted) }
+                    } else {
+                        SettingRow("Subscription status", state.account?.status ?: "Unavailable")
+                        SettingRow("Expires", state.account?.expiresAtEpochSeconds?.let { java.time.Instant.ofEpochSecond(it).toString().take(10) } ?: "Unknown")
+                        SettingRow("Server", state.account?.baseUrl?.substringAfter("://") ?: "Unavailable")
+                        OhButton("Refresh content", sync, Modifier.fillMaxWidth(), primary = true)
+                        OhButton("Remove account", remove, Modifier.fillMaxWidth())
+                        Text("This product can use TMDB data but is not endorsed or certified by TMDB.", color = Muted, fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -749,7 +779,7 @@ private fun PlayerScreen(url: String, title: String, startPositionMs: Long, save
     val context = LocalContext.current
     var error by remember(url) { mutableStateOf<String?>(null) }
     var buffering by remember(url) { mutableStateOf(true) }
-    val subtitleApi = remember { OpenSubtitlesGateway(BuildConfig.OPENSUBTITLES_API_KEY) }
+    val subtitleApi = remember(context) { OpenSubtitlesGateway(SubtitleCredentialStore(context).load().orEmpty()) }
     val tmdbApi = remember { TmdbGateway(BuildConfig.TMDB_API_KEY) }
     val matcher = remember { MovieSubtitleMatcher(subtitleApi, object : MovieIdentityLookup {
         override suspend fun resolve(movie: MovieSubtitle) = tmdbApi.resolveSubtitleMovie(movie)
