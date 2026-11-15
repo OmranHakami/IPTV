@@ -144,14 +144,14 @@ class OhViewModel(
     init {
         viewModelScope.launch {
             repository.activeAccount.collect { account ->
-                mutableState.value = mutableState.value.copy(
-                    account = account,
-                    destination = when {
-                        mutableState.value.destination != Destination.Loading -> mutableState.value.destination
-                        account == null -> Destination.Onboarding
-                        else -> Destination.Hub
-                    },
-                )
+                if (account == null && mutableState.value.destination == Destination.Loading) {
+                    startPhonePairing()
+                } else {
+                    mutableState.value = mutableState.value.copy(
+                        account = account,
+                        destination = if (mutableState.value.destination == Destination.Loading) Destination.Hub else mutableState.value.destination,
+                    )
+                }
             }
         }
     }
@@ -234,7 +234,7 @@ class OhViewModel(
         }
     }
 
-    fun cancelPhonePairing(destination: Destination = Destination.Onboarding) {
+    fun cancelPhonePairing(destination: Destination) {
         pairingJob?.cancel()
         pairingJob = null
         localPairingServer.stop()
@@ -243,7 +243,7 @@ class OhViewModel(
 
     fun sync(account: AccountEntity? = mutableState.value.account) {
         if (account == null) {
-            mutableState.value = mutableState.value.copy(busy = false, message = "No account is connected.", destination = Destination.Onboarding)
+            startPhonePairing()
             return
         }
         mutableState.value = mutableState.value.copy(destination = Destination.Sync, busy = true, message = null, syncProgress = emptyList())
@@ -262,6 +262,10 @@ class OhViewModel(
     }
 
     fun navigate(destination: Destination) {
+        if (destination == Destination.PhonePairing && mutableState.value.pairing.phase == PairingPhase.Idle) {
+            startPhonePairing()
+            return
+        }
         if (mutableState.value.destination == Destination.PhonePairing && destination != Destination.PhonePairing) {
             cancelPhonePairing(destination)
             return
@@ -394,6 +398,14 @@ class OhViewModel(
         }
     }
 
+    fun toggleFavorite(movie: MovieEntity) {
+        viewModelScope.launch { repository.toggleFavorite(movie.accountId, "movie", movie.providerId) }
+    }
+
+    fun toggleFavorite(series: SeriesEntity) {
+        viewModelScope.launch { repository.toggleFavorite(series.accountId, "series", series.providerId) }
+    }
+
     fun search(query: String) {
         val account = mutableState.value.account ?: return
         mutableState.value = mutableState.value.copy(searchQuery = query)
@@ -420,7 +432,8 @@ class OhViewModel(
         val account = mutableState.value.account ?: return
         viewModelScope.launch {
             repository.deleteAccount(account)
-            mutableState.value = OhUiState(destination = Destination.Onboarding)
+            mutableState.value = OhUiState()
+            startPhonePairing()
         }
     }
 

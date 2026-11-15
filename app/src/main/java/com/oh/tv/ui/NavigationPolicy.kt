@@ -8,7 +8,7 @@ object NavigationPolicy {
         Destination.SeriesDetails -> Destination.TvShows
         Destination.Search, Destination.MyList -> Destination.Movies
         Destination.Movies, Destination.TvShows, Destination.LiveTv, Destination.OnDemand -> Destination.Hub
-        Destination.PhonePairing, Destination.ManualSetup -> Destination.Onboarding
+        Destination.ManualSetup -> Destination.PhonePairing
         else -> Destination.Hub
     }
 }

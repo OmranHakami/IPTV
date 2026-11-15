@@ -112,27 +112,26 @@ fun OhApp(viewModel: OhViewModel) {
     val continueMovies by viewModel.continueMovies.collectAsStateWithLifecycle()
     val catalogCounts by viewModel.catalogCounts.collectAsStateWithLifecycle()
 
-    BackHandler(enabled = state.destination !in setOf(Destination.Loading, Destination.Onboarding, Destination.Hub)) {
+    BackHandler(enabled = state.destination !in setOf(Destination.Loading, Destination.Onboarding, Destination.PhonePairing, Destination.Hub)) {
         viewModel.navigate(NavigationPolicy.back(state.destination, state.settingsReturn, state.playerReturn))
     }
 
     when (state.destination) {
         Destination.Loading -> Screen { StatusPanel("OH", "Opening your local library…") }
-        Destination.Onboarding -> OnboardingChoiceScreen(
-            onPhone = viewModel::startPhonePairing,
-            onManual = { viewModel.navigate(Destination.ManualSetup) },
-        )
+        Destination.Onboarding -> {
+            LaunchedEffect(Unit) { viewModel.startPhonePairing() }
+            Screen { StatusPanel("OH", "Creating a secure phone pairing session…") }
+        }
         Destination.PhonePairing -> PhonePairingScreen(
             state = state.pairing,
             onRetry = viewModel::startPhonePairing,
             onManual = { viewModel.cancelPhonePairing(Destination.ManualSetup) },
-            onBack = { viewModel.cancelPhonePairing() },
         )
         Destination.ManualSetup -> ManualSetupScreen(
             busy = state.busy,
             message = state.message,
             onConnect = viewModel::connect,
-            onBack = { viewModel.navigate(Destination.Onboarding) },
+            onBack = viewModel::startPhonePairing,
         )
         Destination.Sync -> LibraryPreparationScreen(
             state = state,
@@ -144,6 +143,7 @@ fun OhApp(viewModel: OhViewModel) {
             onLive = { viewModel.navigate(Destination.LiveTv) },
             onMovies = { viewModel.navigate(Destination.Movies) },
             onShows = { viewModel.navigate(Destination.TvShows) },
+            onReload = viewModel::sync,
             onSettings = { viewModel.openSettings(Destination.Hub) },
         )
         Destination.LiveTv -> LiveTvScreen(
@@ -168,8 +168,8 @@ fun OhApp(viewModel: OhViewModel) {
             onMovie = viewModel::openMovie,
             onMovieVisible = viewModel::loadMovieMetadata,
         )
-        Destination.Movies -> MovieCatalogScreen(viewModel, viewModel::openMovie)
-        Destination.TvShows -> SeriesCatalogScreen(viewModel, viewModel::openSeries)
+        Destination.Movies -> DesignedMovieCatalogScreen(viewModel, viewModel::openMovie)
+        Destination.TvShows -> DesignedSeriesCatalogScreen(viewModel, viewModel::openSeries)
         Destination.MovieDetails -> state.selectedMovie?.let { MovieDetailsScreen(it, state.favorite, state.message, viewModel::playMovie, viewModel::toggleFavorite) { viewModel.navigate(Destination.Movies) } }
             ?: StatusPanel("Movie unavailable", "The selected movie is no longer in the local catalog.")
         Destination.SeriesDetails -> state.selectedSeries?.let { SeriesDetailsScreen(it, episodes, seriesProgress, state, viewModel::playEpisode, viewModel::toggleFavorite) { viewModel.navigate(Destination.TvShows) } }
@@ -395,86 +395,6 @@ private fun OnDemandScreen(
             AsyncImage(movie.providerIconUrl, movie.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Text(movie.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(8.dp))
-        }
-    }
-}
-
-@Composable
-private fun MovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> Unit) {
-    val movies = viewModel.movies.collectAsLazyPagingItems()
-    val selectedCategory by viewModel.selectedMovieCategory.collectAsStateWithLifecycle()
-    val categories by viewModel.movieCategories.collectAsStateWithLifecycle()
-    var genreOpen by remember { mutableStateOf(false) }
-    BrowseScreen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            MediaNavigationBar(
-                active = MediaSection.Movies,
-                onHome = { viewModel.navigate(Destination.Hub) },
-                onMovies = { genreOpen = false },
-                onShows = { viewModel.navigate(Destination.TvShows) },
-                onMyList = { viewModel.navigate(Destination.MyList) },
-                onSearch = { viewModel.navigate(Destination.Search) },
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Movies", color = WarmWhite, fontSize = 20.sp)
-                OhButton(categories.firstOrNull { it.providerId == selectedCategory }?.name ?: "All movie categories", { genreOpen = !genreOpen })
-
-            }
-            if (genreOpen) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { OhButton("All movies", { viewModel.selectMovieCategory(null); genreOpen = false }) }
-                    items(categories) { category ->
-                        OhButton(category.name, { viewModel.selectMovieCategory(category.providerId); genreOpen = false })
-                    }
-                }
-            }
-            LazyVerticalGrid(GridCells.Adaptive(118.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                items(movies.itemCount) { index -> movies[index]?.let { movie ->
-                    LaunchedEffect(movie.accountId, movie.providerId, movie.metadataUpdatedAt) { viewModel.loadMovieMetadata(movie) }
-                    MovieCard(movie) { select(movie) }
-                } }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -> Unit) {
-    val shows = viewModel.series.collectAsLazyPagingItems()
-    val categories by viewModel.seriesCategories.collectAsStateWithLifecycle()
-    val selectedCategory by viewModel.selectedSeriesCategory.collectAsStateWithLifecycle()
-    var categoryOpen by remember { mutableStateOf(false) }
-    val navFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { navFocus.requestFocus() }
-    BrowseScreen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            MediaNavigationBar(
-                active = MediaSection.Shows,
-                onHome = { viewModel.navigate(Destination.Hub) },
-                onMovies = { viewModel.navigate(Destination.Movies) },
-                onShows = {},
-                onMyList = { viewModel.navigate(Destination.MyList) },
-                onSearch = { viewModel.navigate(Destination.Search) },
-                initialFocus = navFocus,
-            )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("TV Shows", color = WarmWhite, fontSize = 20.sp)
-                OhButton(categories.firstOrNull { it.providerId == selectedCategory }?.name ?: "All show categories", { categoryOpen = !categoryOpen })
-            }
-            if (categoryOpen) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { OhButton("All shows", { viewModel.selectSeriesCategory(null); categoryOpen = false }) }
-                    items(categories) { category ->
-                        OhButton(category.name, { viewModel.selectSeriesCategory(category.providerId); categoryOpen = false })
-                    }
-                }
-            }
-            LazyVerticalGrid(GridCells.Adaptive(118.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                items(shows.itemCount) { index -> shows[index]?.let { show ->
-                    LaunchedEffect(show.accountId, show.providerId, show.metadataUpdatedAt) { viewModel.loadSeriesMetadata(show) }
-                    SeriesCard(show) { select(show) }
-                } }
-            }
         }
     }
 }

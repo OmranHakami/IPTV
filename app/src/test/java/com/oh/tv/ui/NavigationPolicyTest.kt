@@ -14,9 +14,8 @@ class NavigationPolicyTest {
         assertEquals(Destination.OnDemand, NavigationPolicy.back(Destination.Settings, Destination.OnDemand, Destination.Hub))
     }
 
-    @Test fun setupScreensReturnToMethodChoice() {
-        assertEquals(Destination.Onboarding, NavigationPolicy.back(Destination.PhonePairing, Destination.Hub, Destination.Hub))
-        assertEquals(Destination.Onboarding, NavigationPolicy.back(Destination.ManualSetup, Destination.Hub, Destination.Hub))
+    @Test fun manualSetupReturnsToPhonePairing() {
+        assertEquals(Destination.PhonePairing, NavigationPolicy.back(Destination.ManualSetup, Destination.Hub, Destination.Hub))
     }
 
     @Test fun browseScreensReturnThroughTheNewMediaHome() {
