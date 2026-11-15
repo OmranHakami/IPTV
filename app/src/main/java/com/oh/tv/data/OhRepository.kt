@@ -66,6 +66,8 @@ data class CatalogCounts(val liveChannels: Int = 0, val movies: Int = 0, val ser
 
 val BrowseMovieGenres = listOf("Action", "Comedy", "Drama", "Documentary", "Science Fiction")
 
+internal fun fallbackChannelNumber(batchStart: Int, rowIndex: Int): Int = batchStart + rowIndex + 1
+
 class OhRepository(
     private val database: OhDatabase,
     private val vault: CredentialVault,
@@ -352,7 +354,7 @@ class OhRepository(
                         accountId = account.id,
                         providerId = id,
                         categoryId = raw["category_id"].asString().orEmpty(),
-                        number = raw["num"].asInt() ?: batchStart + index + 1,
+                        number = raw["num"].asInt() ?: fallbackChannelNumber(batchStart, index),
                         name = raw["name"].asString() ?: "Untitled channel",
                         iconUrl = raw["stream_icon"].asString(),
                         epgChannelId = raw["epg_channel_id"].asString(),
