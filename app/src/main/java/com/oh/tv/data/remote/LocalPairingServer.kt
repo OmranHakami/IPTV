@@ -24,6 +24,15 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
 
+internal fun validatedPairingChunks(array: JSONArray): List<String>? {
+    if (array.length() !in 1..16) return null
+    return (0 until array.length()).map { index ->
+        val value = array.opt(index)
+        if (value !is String || value.length !in 300..400) return null
+        value
+    }
+}
+
 data class LocalPairingSession(
     val code: String,
     val linkUrl: String,
@@ -138,14 +147,8 @@ class LocalPairingServer(context: Context) {
         if (!validCode(json.optString("code"))) return respond(output, 404, "application/json", "{\"error\":\"invalid_code\"}".toByteArray())
         val array: JSONArray = json.optJSONArray("chunks")
             ?: return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
-        if (array.length() !in 1..16) return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
-        val chunks = (0 until array.length()).map { index ->
-            val chunk = array.opt(index)
-            if (chunk !is String || chunk.length !in 300..400) {
-                return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
-            }
-            chunk
-        }
+        val chunks = validatedPairingChunks(array)
+            ?: return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
         if (!submissions.trySend(chunks).isSuccess) return respond(output, 409, "application/json", "{\"error\":\"already_submitted\"}".toByteArray())
         respond(output, 202, "application/json", "{\"accepted\":true}".toByteArray())
     }
