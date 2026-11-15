@@ -401,9 +401,8 @@ private fun OnDemandScreen(
 @Composable
 private fun MovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> Unit) {
     val movies = viewModel.movies.collectAsLazyPagingItems()
-    val selectedGenre by viewModel.selectedMovieGenre.collectAsStateWithLifecycle()
-    val genreCounts by viewModel.movieGenreCounts.collectAsStateWithLifecycle()
-    val counts by viewModel.catalogCounts.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedMovieCategory.collectAsStateWithLifecycle()
+    val categories by viewModel.movieCategories.collectAsStateWithLifecycle()
     var genreOpen by remember { mutableStateOf(false) }
     val genreFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { genreFocus.requestFocus() }
@@ -419,16 +418,16 @@ private fun MovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Movies", color = WarmWhite, fontSize = 20.sp)
-                MovieGenreMenu(
-                    open = genreOpen,
-                    selected = selectedGenre,
-                    totalMovies = counts.movies,
-                    counts = genreCounts,
-                    onToggle = { genreOpen = !genreOpen },
-                    onSelect = { genre -> viewModel.selectMovieGenre(genre); genreOpen = false },
-                    onDismiss = { genreOpen = false },
-                    focusRequester = genreFocus,
-                )
+                OhButton(categories.firstOrNull { it.providerId == selectedCategory }?.name ?: "All movie categories", { genreOpen = !genreOpen })
+
+            }
+            if (genreOpen) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { OhButton("All movies", { viewModel.selectMovieCategory(null); genreOpen = false }) }
+                    items(categories) { category ->
+                        OhButton(category.name, { viewModel.selectMovieCategory(category.providerId); genreOpen = false })
+                    }
+                }
             }
             LazyVerticalGrid(GridCells.Adaptive(118.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(movies.itemCount) { index -> movies[index]?.let { movie ->
@@ -443,6 +442,9 @@ private fun MovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
 @Composable
 private fun SeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -> Unit) {
     val shows = viewModel.series.collectAsLazyPagingItems()
+    val categories by viewModel.seriesCategories.collectAsStateWithLifecycle()
+    val selectedCategory by viewModel.selectedSeriesCategory.collectAsStateWithLifecycle()
+    var categoryOpen by remember { mutableStateOf(false) }
     val navFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { navFocus.requestFocus() }
     BrowseScreen {
@@ -456,7 +458,18 @@ private fun SeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
                 onSearch = { viewModel.navigate(Destination.Search) },
                 initialFocus = navFocus,
             )
-            Text("TV Shows", color = WarmWhite, fontSize = 20.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("TV Shows", color = WarmWhite, fontSize = 20.sp)
+                OhButton(categories.firstOrNull { it.providerId == selectedCategory }?.name ?: "All show categories", { categoryOpen = !categoryOpen })
+            }
+            if (categoryOpen) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { OhButton("All shows", { viewModel.selectSeriesCategory(null); categoryOpen = false }) }
+                    items(categories) { category ->
+                        OhButton(category.name, { viewModel.selectSeriesCategory(category.providerId); categoryOpen = false })
+                    }
+                }
+            }
             LazyVerticalGrid(GridCells.Adaptive(118.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(shows.itemCount) { index -> shows[index]?.let { show ->
                     LaunchedEffect(show.accountId, show.providerId, show.metadataUpdatedAt) { viewModel.loadSeriesMetadata(show) }
