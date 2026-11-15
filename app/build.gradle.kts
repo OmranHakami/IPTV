@@ -12,10 +12,6 @@ val localProperties = Properties().apply {
     if (file.exists()) file.inputStream().use(::load)
 }
 
-val subtitleApiKey = localProperties.getProperty("OPENSUBTITLES_API_KEY")
-    ?: providers.gradleProperty("OPENSUBTITLES_API_KEY").orNull
-    ?: ""
-
 val tmdbApiKey = localProperties.getProperty("TMDB_API_KEY")
     ?: providers.gradleProperty("TMDB_API_KEY").orNull
     ?: ""
@@ -35,11 +31,6 @@ android {
             "String",
             "TMDB_API_KEY",
             "\"${tmdbApiKey.replace("\"", "\\\"")}\"",
-        )
-        buildConfigField(
-            "String",
-            "OPENSUBTITLES_API_KEY",
-            "\"${subtitleApiKey.replace("\"", "\\\"")}\"",
         )
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
