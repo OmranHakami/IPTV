@@ -14,6 +14,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
+import java.io.InputStream
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -23,6 +24,15 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.security.SecureRandom
+
+internal fun validatedPairingChunks(array: JSONArray): List<String>? {
+    if (array.length() !in 1..16) return null
+    return (0 until array.length()).map { index ->
+        val value = array.opt(index)
+        if (value !is String || value.length !in 300..400) return null
+        value
+    }
+}
 
 data class LocalPairingSession(
     val code: String,
@@ -40,6 +50,7 @@ class LocalPairingServer(context: Context) {
     private var exponent: String = ""
     private var expiresAt: Long = 0
     private var submissions = Channel<List<String>>(1)
+    private val connectionSlots = PairingConnectionLimiter(MAX_CONCURRENT_CLIENTS)
 
     suspend fun start(modulusBase64: String, publicExponent: String): LocalPairingSession = withContext(Dispatchers.IO) {
         stop()
@@ -82,7 +93,17 @@ class LocalPairingServer(context: Context) {
     private suspend fun acceptLoop(server: ServerSocket) {
         while (scope.isActive && !server.isClosed) {
             val client = runCatching { server.accept() }.getOrNull() ?: break
-            scope.launch { client.use(::handleClient) }
+            if (!connectionSlots.tryAcquire()) {
+                client.close()
+                continue
+            }
+            scope.launch {
+                try {
+                    client.use(::handleClient)
+                } finally {
+                    connectionSlots.release()
+                }
+            }
         }
     }
 
@@ -102,16 +123,13 @@ class LocalPairingServer(context: Context) {
             val parts = it.split('=', limit = 2)
             if (parts.size == 2) URLDecoder.decode(parts[0], "UTF-8") to URLDecoder.decode(parts[1], "UTF-8") else null
         }.toMap()
-        val contentLength = lines.firstOrNull { it.startsWith("Content-Length:", true) }
-            ?.substringAfter(':')?.trim()?.toIntOrNull() ?: 0
-        if (contentLength !in 0..MAX_BODY_BYTES) return respond(output, 413, "text/plain", byteArrayOf())
-        val body = ByteArray(contentLength)
-        var read = 0
-        while (read < contentLength) {
-            val count = input.read(body, read, contentLength - read)
-            if (count < 0) break
-            read += count
+        val contentLength = when (val length = HttpContentLength.parse(lines.drop(1), method == "POST")) {
+            is HttpContentLength.Result.Valid -> length.value
+            HttpContentLength.Result.Invalid -> return respond(output, 400, "text/plain", byteArrayOf())
+            HttpContentLength.Result.TooLarge -> return respond(output, 413, "text/plain", byteArrayOf())
         }
+        val body = readExactBody(input, contentLength)
+            ?: return respond(output, 400, "application/json", "{\"error\":\"incomplete_body\"}".toByteArray())
         when {
             method == "GET" && path == "/" -> asset(output, "pairing/index.html", "text/html; charset=utf-8")
             method == "GET" && path == "/link.css" -> asset(output, "pairing/link.css", "text/css; charset=utf-8")
@@ -138,9 +156,8 @@ class LocalPairingServer(context: Context) {
         if (!validCode(json.optString("code"))) return respond(output, 404, "application/json", "{\"error\":\"invalid_code\"}".toByteArray())
         val array: JSONArray = json.optJSONArray("chunks")
             ?: return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
-        if (array.length() !in 1..16) return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
-        val chunks = List(array.length()) { array.getString(it) }
-        if (chunks.any { it.length !in 300..400 }) return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
+        val chunks = validatedPairingChunks(array)
+            ?: return respond(output, 400, "application/json", "{\"error\":\"invalid_payload\"}".toByteArray())
         if (!submissions.trySend(chunks).isSuccess) return respond(output, 409, "application/json", "{\"error\":\"already_submitted\"}".toByteArray())
         respond(output, 202, "application/json", "{\"accepted\":true}".toByteArray())
     }
@@ -188,6 +205,29 @@ class LocalPairingServer(context: Context) {
         const val LOCAL_PORT = 8_765
         const val MAX_HEADER_BYTES = 16 * 1_024
         const val MAX_BODY_BYTES = 32 * 1_024
+        const val MAX_CONCURRENT_CLIENTS = 8
         const val CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
     }
+}
+
+/**
+ * Read exactly the declared HTTP request body length, rejecting premature EOF.
+ * Never forward a partially filled body to the pairing payload parser.
+ */
+internal fun readExactBody(input: InputStream, length: Int): ByteArray? {
+    require(length >= 0)
+    val body = ByteArray(length)
+    var offset = 0
+    while (offset < length) {
+        val count = input.read(body, offset, length - offset)
+        if (count < 0) return null
+        if (count == 0) {
+            val next = input.read()
+            if (next < 0) return null
+            body[offset++] = next.toByte()
+        } else {
+            offset += count
+        }
+    }
+    return body
 }
