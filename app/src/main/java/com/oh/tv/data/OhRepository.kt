@@ -291,9 +291,9 @@ class OhRepository(
         val id = item.tmdbId ?: return item
         val metadata = tmdb.movie(id).getOrNull() ?: return item
         val updated = item.copy(
-            name = metadata.title.ifBlank { item.name },
-            overview = metadata.overview ?: item.overview,
-            releaseDate = metadata.releaseDate ?: item.releaseDate,
+            tmdbTitle = metadata.title.takeIf { it.isNotBlank() },
+            tmdbOverview = metadata.overview ?: item.tmdbOverview,
+            tmdbReleaseDate = metadata.releaseDate ?: item.tmdbReleaseDate,
             runtimeMinutes = metadata.runtimeMinutes ?: item.runtimeMinutes,
             tmdbRating = metadata.rating,
             tmdbVoteCount = metadata.voteCount,
@@ -312,9 +312,9 @@ class OhRepository(
         val metadata = tmdb.series(id).getOrNull() ?: return item
         val current = database.catalogDao().seriesItem(item.accountId, item.providerId) ?: item
         val updated = current.copy(
-            name = metadata.title.ifBlank { current.name },
-            overview = metadata.overview ?: current.overview,
-            releaseDate = metadata.releaseDate ?: current.releaseDate,
+            tmdbTitle = metadata.title.takeIf { it.isNotBlank() } ?: current.tmdbTitle,
+            tmdbOverview = metadata.overview ?: current.tmdbOverview,
+            tmdbReleaseDate = metadata.releaseDate ?: current.tmdbReleaseDate,
             tmdbRating = metadata.rating ?: current.tmdbRating,
             tmdbVoteCount = metadata.voteCount ?: current.tmdbVoteCount,
             genres = metadata.genres ?: current.genres,
@@ -422,6 +422,9 @@ class OhRepository(
                     val merged = mapped.map { fresh ->
                         existing[fresh.providerId]?.let { old ->
                             fresh.copy(
+                                tmdbTitle = old.tmdbTitle,
+                                tmdbOverview = old.tmdbOverview,
+                                tmdbReleaseDate = old.tmdbReleaseDate,
                                 overview = old.overview,
                                 releaseDate = old.releaseDate,
                                 runtimeMinutes = old.runtimeMinutes,
@@ -478,9 +481,9 @@ class OhRepository(
                     val merged = mapped.map { fresh ->
                         existing[fresh.providerId]?.let { old ->
                             fresh.copy(
-                                name = if (old.metadataUpdatedAt != null) old.name else fresh.name,
-                                overview = old.overview ?: fresh.overview,
-                                releaseDate = old.releaseDate ?: fresh.releaseDate,
+                                tmdbTitle = old.tmdbTitle,
+                                tmdbOverview = old.tmdbOverview,
+                                tmdbReleaseDate = old.tmdbReleaseDate,
                                 tmdbRating = old.tmdbRating,
                                 tmdbVoteCount = old.tmdbVoteCount,
                                 genres = old.genres,
