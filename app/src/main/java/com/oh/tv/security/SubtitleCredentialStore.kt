@@ -39,7 +39,8 @@ class SubtitleCredentialStore(context: Context) {
         preferences.edit().putString("api_key", Base64.encodeToString(payload, Base64.NO_WRAP)).apply()
     }
 
-    fun load(): String? {\n        return try {
+    fun load(): String? {
+        return try {
         val encoded = preferences.getString("api_key", null) ?: return null
         val bytes = Base64.decode(encoded, Base64.NO_WRAP)
         require(bytes.size > 28)
@@ -47,5 +48,10 @@ class SubtitleCredentialStore(context: Context) {
             init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
         }
         String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8)
-        } catch (_: Exception) {\n            null\n        }\n    }\n\n    fun isConfigured(): Boolean = !load().isNullOrBlank()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun isConfigured(): Boolean = !load().isNullOrBlank()
 }
