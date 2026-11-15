@@ -1,115 +1,132 @@
-# OH for Google TV
+# OH — IPTV Player
 
-Current source version: **0.3.1**
+**This README is the single source of truth for the intended OH app experience.** It describes what the app should do, not a claim that every feature is already implemented or tested. If the code disagrees with a requirement below, that is a gap to investigate—not permission to silently change the requirement.
 
-OH is an English-only, fully local Xtream-compatible player for Google TV / Android TV and compatible Android-based Huawei tablets. It separates Live TV from Movies & TV Shows at a permanent starting hub and keeps one shared Settings area.
+## Product vision
 
-## Current milestone
+OH is a fast, polished IPTV player for **Google TV / Android TV and compatible Android tablets**, including touch-first layouts around **11.5-inch tablets**. It connects to a user's own authorized Xtream-compatible IPTV service and provides three clear destinations: **Live TV, Movies, and TV Shows**.
 
-Implemented:
+The Android app owns its UI, catalog cache, viewing history, and playback. It talks directly to the user's IPTV provider and, when configured, to metadata/subtitle services. **There is no OH cloud account, required cloud backend, remote pairing service, Redis, or external application database.** Internet access is still required for provider streams and optional third-party metadata/subtitle requests.
 
-- TV-only Android manifest, launcher icon and 320×180 OH banner
-- Kotlin + Compose for TV dark design foundation
-- First-run Xtream connection screen
-- Phone-assisted browser setup hosted temporarily by the TV on the local network
-- Encrypted browser-to-TV credential transfer with a five-minute one-time code and manual TV fallback
-- Redesigned experience selection, manual setup, phone pairing and library preparation screens
-- Redesigned Movies and TV Shows browser navigation with a Room-backed TMDB genre filter and live counts
-- Android Keystore-backed AES-GCM credential storage
-- Tolerant Xtream authentication
-- Progressive, cancellation-aware streaming imports in 300-item bounded batches
-- Live TV categories and channels
-- Unified Movies and TV Shows catalogs with no VOD/series category calls or storage
-- Room database with account-scoped IDs and generation-based stale cleanup
-- Paging for Live TV, Movies and TV Shows with a 300-item memory ceiling per list
-- Starting Page with Live TV and Movies & TV Shows modes
-- Deterministic starting-page focus with high-contrast D-pad indicators
-- Provider-safe three-scope synchronization for Live TV, Movies and TV Shows
-- Independent sync states, elapsed time, retained-cache fallback and per-scope retry-safe failure reporting
-- Live TV browser
-- Movie and TV-show grids
-- Progressive TMDB enrichment as visible catalog cards load, with four-request concurrency limit, local caching, and provider-data fallback
-- Movie details
-- TV-show details, seasons, episodes and episode playback
-- Compact cinematic TV-show page: full-height key art on the left, dense episode rail on the right, vertical season selector, focused white episode card, Continue and progress indicators
-- Direct Media3/ExoPlayer playback with resume, buffering, retry and safe errors
-- Local search across movies and TV shows
-- Favorites / My List
-- Continue Watching with 90% completion handling
-- Shared Settings
-- Credential URL redaction and tolerant-type unit tests
-- Separate TV and tablet product flavors sharing the same local backend
-- Touch feedback, reduced tablet margins and adaptive catalog grids
-- Compact visual scale across onboarding, hub, catalogs, details, settings and playback states for 720p/1080p TV readability without oversized controls
+OH does not bundle or supply IPTV content.
 
-Remaining release-hardening milestones:
+## The experience
 
-- XMLTV/short EPG ingestion and timeline UI
-- MediaSession and custom playback overlay
-- Audio/subtitle preference persistence
-- Parental-control PIN and hidden content
-- WorkManager periodic refresh
-- Full focus restoration and codec tests on a physical TCL TV
-- Database migration test fixtures and 25k-item performance benchmarks
+### First-time setup
 
-## Requirements
+1. Offer **Finish setup on your phone** and **Enter details on TV**.
+2. Phone setup opens a temporary web page hosted by the TV itself at `http://<TV-LAN-IP>:8765`; the phone must be on the same local network.
+3. Pairing uses a short-lived, one-time session (five minutes) and encrypts submitted provider credentials for the TV before transmission. The server stops on completion, cancellation, or expiration.
+4. Manual input of server URL, username, and password always remains available.
+5. Validate the Xtream account, store credentials securely on the device, and show separate import progress for Live TV, Movies, and TV Shows.
+6. Make successfully imported sections usable even if another section fails. Existing cached content survives recoverable failures.
+7. Open the main experience selector after onboarding.
 
-- Android Studio with JDK 17
-- Android SDK 36
-- TCL Google TV, Android TV emulator, or an Android-APK-compatible Huawei MatePad
+### Main experience selector
 
-The project uses AGP 8.9.1 and Gradle 8.11.1. The minimum Android version is API 28.
+- Present **three destinations**: **Movies**, **TV Shows**, and **Live TV**, with access to shared Settings.
+- The **orange selection indicator moves with actual D-pad focus**. It must not remain painted on a default destination after focus moves elsewhere.
+- Button labels are **centered**, with no decorative arrows beside their names.
+- Remote navigation must be predictable; the focused item is visually obvious. Back navigation returns to the appropriate previous screen.
+- TV layouts prioritize remote and D-pad use; tablet layouts support touch and do not scale controls excessively large.
 
-## Local setup
+### Movies
 
-1. Copy `local.properties.example` to `local.properties`.
-2. Set `sdk.dir` to your Android SDK path.
-3. The approved TMDB v3 key is included in `gradle.properties`. A `TMDB_API_KEY` value in `local.properties` overrides it after key rotation.
-4. Open the project in Android Studio and sync Gradle.
-5. Select the `tvDebug` or `tabletDebug` build variant.
-6. Run it on the matching device.
+- Separate Movies page with its own browsing experience and **categories obtained from the IPTV provider**.
+- Filter movies using the provider's actual movie category IDs, not TMDB genres substituted for IPTV categories.
+- Show poster grids/cards, search, details, favorites/My List, and resume watching.
+- Load large catalogs incrementally rather than holding every poster/card in memory at once.
 
-Do not commit `local.properties`. Xtream credentials are entered on the TV and encrypted locally.
+### TV Shows
 
-## Build
+- Separate TV Shows page with **its own IPTV-provider series categories**, independent of movie categories.
+- Browse shows, open show details, choose seasons and episodes, play an episode, and resume progress.
+- Search and favorites/My List apply appropriately to shows as well as movies.
 
-```bash
-# TCL / Google TV
-./gradlew testTvDebugUnitTest assembleTvDebug
+### Live TV
 
-# Huawei MatePad / Android tablet
-./gradlew testTabletDebugUnitTest assembleTabletDebug
-```
+- Separate Live TV browser with provider categories and channels.
+- Channel selection, direct live playback, channel switching, and clear loading/error states work with a remote.
+- EPG/current-next information should be shown when available; missing EPG must not block playback.
 
-The APKs are created under:
+## Focused cards and trailers — mandatory interaction
 
-- `app/build/outputs/apk/tv/debug/`
-- `app/build/outputs/apk/tablet/debug/`
+For both Movie and TV Show cards:
 
-On Windows, `./verify.ps1` runs unit tests, lint and both debug APK builds in one command.
+1. **As soon as a card receives focus:** show a **small, immediate expansion** and a clear moving focus indicator. Display the IPTV data already available (such as name and artwork) without waiting for a network call.
+2. **While focus remains:** enrich the presentation with cached or asynchronously retrieved TMDB information when available (such as preferred title, artwork, rating, and description). The card must remain responsive.
+3. **After the same card remains focused continuously for 5 seconds:** expand into the richer preview state and **play a trailer if one is available**. Do not describe static artwork as a trailer that is playing.
+4. **If focus moves away before 5 seconds:** cancel that pending preview. If a preview is already playing, stop it and return to the compact card state.
+5. If a matching trailer is unavailable, show a useful still/metadata preview rather than a broken player. Do not autoplay trailers across an unfocused grid.
 
-The tablet APK supports touch and adaptive grids and does not require the Android TV `leanback` feature. The TV APK remains landscape-only and D-pad optimized. HarmonyOS 2/3 devices that retain Android APK compatibility can use the tablet build. HarmonyOS NEXT requires a separate native application and cannot install this Android APK.
+The **five-second timer gates trailer playback**, not initial IPTV loading or TMDB metadata retrieval. Metadata may be fetched and cached before focus; focus must not trigger duplicate downloads unnecessarily.
 
-## Design and behavior
+## IPTV and TMDB: two separate information sources
 
-The binding product decisions are in [`docs/OH_PRODUCT_SPEC.md`](docs/OH_PRODUCT_SPEC.md). The broader backend reasoning is in [`docs/LOCAL_BACKEND_ARCHITECTURE.md`](docs/LOCAL_BACKEND_ARCHITECTURE.md).
+**Never overwrite or replace IPTV-origin fields in storage with TMDB values.** Each movie/show has two independently identifiable metadata sources:
 
-The 0.2.0 large-catalog changes and before/after comparison are in [`docs/LARGE_CATALOG_UPDATE.md`](docs/LARGE_CATALOG_UPDATE.md).
+- **IPTV source:** provider content ID, stream details, original name, poster/artwork, provider category, provider description/rating where available, and other provider-supplied fields.
+- **TMDB source:** matched TMDB ID, title, descriptions, posters/backdrops, release information, ratings, genres, and trailer information when available.
 
-The phone onboarding protocol, deployment boundary and D-pad acceptance tests are in [`docs/PHONE_PAIRING_AND_ONBOARDING.md`](docs/PHONE_PAIRING_AND_ONBOARDING.md).
+**Display selection:** prefer valid TMDB presentation metadata when it exists; otherwise fall back to IPTV metadata **field by field**. Always preserve the original IPTV values. For **catalog membership, categories, stream identity, and playback**, the IPTV provider remains authoritative.
 
-## Content and metadata
+TMDB matching and enrichment should happen asynchronously, be cached locally, and avoid blocking catalog browsing. Prefer a reliable match; never attach unrelated TMDB data just to fill an empty field. The UI must handle missing or unmatched TMDB data without hiding playable IPTV content.
 
-OH does not provide content. Users connect their own authorized Xtream-compatible service.
+## Playback
 
-Movie and TV-show provider categories are deliberately ignored. TMDB genres may appear as descriptive metadata but do not create provider category navigation.
+- Play provider streams directly on the device using the Android media player stack; OH does not require its own stream relay.
+- Support live channels, movies, and series episodes, with buffering/retry/error feedback appropriate to each.
+- Movies and episodes support pause, seek, continue watching, and saved playback position.
+- Support available audio tracks and subtitle selection, including optional subtitle lookup when configured.
+- Playback URLs containing provider credentials must not be persisted or logged.
+- Focus and navigation return to the correct content after exiting playback.
 
-This product can use TMDB data but is not endorsed or certified by TMDB. Before public or commercial distribution, review TMDB's current terms and obtain any required commercial agreement.
+## Local storage, sync, and reliability
 
-## Security notes
+- Cache provider catalogs, separate TMDB metadata, categories, favorites, and playback progress locally using Room/SQLite or equivalent local persistence.
+- Use paging and bounded processing for providers with tens of thousands of channels, movies, or episodes.
+- Import Live TV, Movies, and TV Shows independently, with clear progress, partial success, retry, and stale-cache states.
+- A failed or cancelled refresh must not destroy the last usable catalog or personal viewing state.
+- Database upgrades must preserve accounts, favorites, and watch history/progress. Avoid destructive fallback behavior for irreplaceable user state.
+- Secure Xtream credentials using Android Keystore-backed storage; never expose raw credentials in diagnostic messages or logs.
+- Keep a secure local pairing boundary on **HTTP port 8765**. Do not add cloud pairing, mandatory HTTPS pairing, remote activation, or an unrelated backend service.
 
-- Playback URLs contain Xtream credentials and must never be logged.
-- Release builds must not enable HTTP body logging.
-- HTTP providers are supported for compatibility; HTTPS is preferred.
-- The TMDB key is a client-side credential and can be extracted from a distributed APK. Revisit the metadata architecture before a public release.
-"# IPTV" 
+## Design and device requirements
+
+- A premium, restrained dark interface with artwork-forward movie/show cards and **orange focus/selection cues**.
+- Clear visual feedback for focused, selected, loading, error, empty, stale, and offline states.
+- Buttons and typography remain legible on TVs without becoming oversized on 11.5-inch tablets.
+- D-pad, OK, Back, and playback controls must remain usable with a TV remote; touch controls must work in the tablet build.
+- Every important action must be reachable without relying on a mouse.
+- English is the initial interface language.
+
+## Required screens
+
+1. Setup method selection / phone pairing / manual Xtream login
+2. Library preparation and sync progress
+3. Main experience selector: Movies / TV Shows / Live TV
+4. Movies browser with IPTV movie categories
+5. TV Shows browser with IPTV series categories
+6. Live TV categories and channel browser
+7. Movie details
+8. TV Show details / seasons / episodes
+9. Search across the relevant catalog content
+10. My List / favorites and Continue Watching
+11. Live and on-demand player
+12. Shared Settings (account, sync, playback, subtitles, and other supported preferences)
+
+## What must be verified before calling a change complete
+
+- **TV and tablet:** the feature works in both builds, with correct navigation, focus, layout, and touch behavior.
+- **Source separation:** TMDB enrichment never replaces original IPTV fields; missing TMDB values fall back correctly.
+- **Categories:** Movies and TV Shows use the distinct IPTV categories supplied by the provider.
+- **Focus and preview:** immediate small expansion, exactly five seconds of continuous focus before attempting trailer playback, and cancellation on focus loss.
+- **Navigation:** orange focus follows the selected control; home labels are centered without arrows.
+- **Resilience:** offline cached browsing, interrupted-sync recovery, and database-upgrade retention are tested.
+- **Security:** LAN-only pairing remains on port 8765; credentials and playback URLs stay private.
+- **Performance:** large catalog navigation stays responsive without unbounded memory loading.
+- **Playback:** live, movie, and episode playback plus resume, subtitles, and errors are tested on representative devices.
+
+## Rule for coding agents and future changes
+
+Treat this document as **approved product intent**, not a test report. Inspect the actual current code and tests before claiming that a requirement is implemented. For every change, state (a) which requirement it serves, (b) its code locations, (c) tests actually run, and (d) any remaining gap. **Do not restore old product rules from deleted documents or introduce unrelated infrastructure or architecture rewrites.** If a product decision is genuinely missing, flag the gap rather than inventing a requirement.
