@@ -12,6 +12,7 @@ import com.oh.tv.data.SyncProgress
 import com.oh.tv.data.local.AccountEntity
 import com.oh.tv.data.local.LiveCategoryEntity
 import com.oh.tv.data.local.LiveChannelEntity
+import com.oh.tv.data.local.VodCategoryEntity
 import com.oh.tv.data.local.MovieEntity
 import com.oh.tv.data.local.SeriesEpisodeEntity
 import com.oh.tv.data.local.SeriesEntity
@@ -85,13 +86,22 @@ class OhViewModel(
     private val metadataSemaphore = Semaphore(4)
     private var pairingJob: Job? = null
 
-    private val selectedMovieGenreState = MutableStateFlow<String?>(null)
-    val selectedMovieGenre: StateFlow<String?> = selectedMovieGenreState
+    private val selectedMovieCategoryState = MutableStateFlow<String?>(null)
+    private val selectedSeriesCategoryState = MutableStateFlow<String?>(null)
+    val selectedMovieCategory: StateFlow<String?> = selectedMovieCategoryState
+    val selectedSeriesCategory: StateFlow<String?> = selectedSeriesCategoryState
+    val movieCategories: StateFlow<List<VodCategoryEntity>> = repository.activeAccount.filterNotNull()
+        .flatMapLatest { repository.vodCategories(it.id, "movie") }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val seriesCategories: StateFlow<List<VodCategoryEntity>> = repository.activeAccount.filterNotNull()
+        .flatMapLatest { repository.vodCategories(it.id, "series") }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val movies: Flow<PagingData<MovieEntity>> = repository.activeAccount.filterNotNull()
-        .combine(selectedMovieGenreState) { account, genre -> account.id to genre }
-        .flatMapLatest { (accountId, genre) -> repository.movies(accountId, genre) }.cachedIn(viewModelScope)
+        .combine(selectedMovieCategoryState) { account, category -> account.id to category }
+        .flatMapLatest { (accountId, category) -> repository.movies(accountId, category) }.cachedIn(viewModelScope)
     val series: Flow<PagingData<SeriesEntity>> = repository.activeAccount.filterNotNull()
-        .flatMapLatest { repository.series(it.id) }.cachedIn(viewModelScope)
+        .combine(selectedSeriesCategoryState) { account, category -> account.id to category }
+        .flatMapLatest { (accountId, category) -> repository.series(accountId, category) }.cachedIn(viewModelScope)
 
     val liveCategories: StateFlow<List<LiveCategoryEntity>> = repository.activeAccount.filterNotNull()
         .flatMapLatest { repository.liveCategories(it.id) }
@@ -269,9 +279,9 @@ class OhViewModel(
         mutableState.value = mutableState.value.copy(selectedCategoryId = id)
     }
 
-    fun selectMovieGenre(genre: String?) {
-        selectedMovieGenreState.value = genre
-    }
+    fun selectMovieCategory(categoryId: String?) { selectedMovieCategoryState.value = categoryId }
+
+    fun selectSeriesCategory(categoryId: String?) { selectedSeriesCategoryState.value = categoryId }
 
     fun playLive(channel: LiveChannelEntity) {
         val account = mutableState.value.account ?: return
