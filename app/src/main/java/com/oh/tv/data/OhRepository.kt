@@ -66,6 +66,9 @@ data class CatalogCounts(val liveChannels: Int = 0, val movies: Int = 0, val ser
 
 val BrowseMovieGenres = listOf("Action", "Comedy", "Drama", "Documentary", "Science Fiction")
 
+internal fun shouldApplyMovieMetadata(current: MovieEntity, requestedTmdbId: Long): Boolean =
+    current.metadataUpdatedAt == null && current.tmdbId == requestedTmdbId
+
 class OhRepository(
     private val database: OhDatabase,
     private val vault: CredentialVault,
@@ -289,7 +292,7 @@ class OhRepository(
             // Preserve the current provider fields and sync generation.
             val current = database.catalogDao().moviesByIds(item.accountId, listOf(item.providerId))
                 .firstOrNull() ?: return@withTransaction item
-            if (current.metadataUpdatedAt != null || current.tmdbId != id) return@withTransaction current
+            if (!shouldApplyMovieMetadata(current, id)) return@withTransaction current
             val updated = current.copy(
                 name = metadata.title.ifBlank { current.name },
                 overview = metadata.overview ?: current.overview,
