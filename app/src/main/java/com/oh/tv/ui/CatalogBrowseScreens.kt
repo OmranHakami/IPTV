@@ -339,7 +339,7 @@ private fun SearchNavigation(
 }
 
 @Composable
-private fun SearchInput(query: String, onQuery: (String) -> Unit, firstResultFocus: FocusRequester?) {
+internal fun SearchInput(query: String, onQuery: (String) -> Unit, firstResultFocus: FocusRequester?) {
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
     LaunchedEffect(Unit) { requester.requestFocus() }
@@ -400,7 +400,7 @@ private fun SearchLoading(query: String) {
 }
 
 @Composable
-private fun SearchFailure(message: String, onRetry: () -> Unit) {
+internal fun SearchFailure(message: String, onRetry: () -> Unit) {
     Column(
         Modifier.offset(48.dp, 112.dp).width(1344.dp).height(650.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
