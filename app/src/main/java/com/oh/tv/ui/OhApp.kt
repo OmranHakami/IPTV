@@ -84,7 +84,6 @@ import com.oh.tv.data.local.SeriesEpisodeEntity
 import com.oh.tv.data.local.PlaybackProgressEntity
 import com.oh.tv.data.SyncScopes
 import com.oh.tv.data.SyncState
-import com.oh.tv.data.remote.AccountInput
 import com.oh.tv.ui.components.FocusSurface
 import com.oh.tv.ui.components.MetadataLine
 import com.oh.tv.ui.components.OhButton
@@ -112,16 +111,12 @@ fun OhApp(viewModel: OhViewModel) {
     val continueMovies by viewModel.continueMovies.collectAsStateWithLifecycle()
     val catalogCounts by viewModel.catalogCounts.collectAsStateWithLifecycle()
 
-    BackHandler(enabled = state.destination !in setOf(Destination.Loading, Destination.Onboarding, Destination.PhonePairing, Destination.Hub)) {
+    BackHandler(enabled = state.destination !in setOf(Destination.Loading, Destination.PhonePairing, Destination.Hub)) {
         viewModel.navigate(NavigationPolicy.back(state.destination, state.settingsReturn, state.playerReturn))
     }
 
     when (state.destination) {
         Destination.Loading -> Screen { StatusPanel("OH", "Opening your local library…") }
-        Destination.Onboarding -> {
-            LaunchedEffect(Unit) { viewModel.startPhonePairing() }
-            Screen { StatusPanel("OH", "Creating a secure phone pairing session…") }
-        }
         Destination.PhonePairing -> PhonePairingScreen(
             state = state.pairing,
             onRetry = viewModel::startPhonePairing,
@@ -179,34 +174,6 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
         Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
-    }
-}
-
-@Composable
-private fun OnboardingScreen(busy: Boolean, message: String?, connect: (AccountInput) -> Unit) {
-    var accountName by remember { mutableStateOf("") }
-    var server by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    Screen {
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(38.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                androidx.compose.foundation.Image(painterResource(R.drawable.oh_logo), null, Modifier.size(50.dp))
-                Text("Connect your service", color = WarmWhite, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-                Text("Enter the Xtream information provided by your TV service.", color = Muted, fontSize = 13.sp)
-                Text("Your information stays on this TV.", color = FocusBlue, fontSize = 12.sp)
-            }
-            Column(Modifier.weight(1f).fillMaxWidth(0.86f), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                OhTextField(accountName, { accountName = it }, "Account name (optional)")
-                OhTextField(server, { server = it }, "Server URL")
-                OhTextField(username, { username = it }, "Username")
-                OhTextField(password, { password = it }, "Password", password = true)
-                if (message != null) Text(message, color = ErrorRed, fontSize = 15.sp)
-                OhButton(if (busy) "Connecting…" else "Connect", {
-                    if (!busy) connect(AccountInput(accountName, server, username, password))
-                }, Modifier.fillMaxWidth(), primary = true)
-            }
-        }
     }
 }
 
