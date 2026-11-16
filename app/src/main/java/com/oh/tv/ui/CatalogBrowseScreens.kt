@@ -121,7 +121,8 @@ fun DesignedMovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
     val selectedCategory by viewModel.selectedMovieCategory.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteMovies.collectAsStateWithLifecycle()
     val favoriteIds = favorites.mapTo(mutableSetOf()) { it.providerId }
-    val loaded = loadedItems(paging, 72).map { movie ->
+    var visibleLimit by remember(selectedCategory) { mutableStateOf(72) }
+    val loaded = loadedItems(paging, visibleLimit).map { movie ->
         CatalogItem(
             id = movie.providerId,
             categoryId = movie.categoryId,
@@ -145,6 +146,12 @@ fun DesignedMovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
         title = "Movies",
         items = loaded,
         pagingLoading = paging.loadState.refresh is LoadState.Loading,
+        pagingError = paging.loadState.refresh is LoadState.Error,
+        appendLoading = paging.loadState.append is LoadState.Loading,
+        appendError = paging.loadState.append is LoadState.Error,
+        hasMore = loaded.size < paging.itemCount,
+        onLoadMore = { visibleLimit += 72 },
+        onRetry = { paging.retry() },
         categories = categories,
         selectedCategory = selectedCategory,
         onSelectCategory = viewModel::selectMovieCategory,
@@ -164,7 +171,8 @@ fun DesignedSeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
     val selectedCategory by viewModel.selectedSeriesCategory.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteSeries.collectAsStateWithLifecycle()
     val favoriteIds = favorites.mapTo(mutableSetOf()) { it.providerId }
-    val loaded = loadedItems(paging, 72).map { show ->
+    var visibleLimit by remember(selectedCategory) { mutableStateOf(72) }
+    val loaded = loadedItems(paging, visibleLimit).map { show ->
         CatalogItem(
             id = show.providerId,
             categoryId = show.categoryId,
@@ -189,6 +197,12 @@ fun DesignedSeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
         title = "TV Shows",
         items = loaded,
         pagingLoading = paging.loadState.refresh is LoadState.Loading,
+        pagingError = paging.loadState.refresh is LoadState.Error,
+        appendLoading = paging.loadState.append is LoadState.Loading,
+        appendError = paging.loadState.append is LoadState.Error,
+        hasMore = loaded.size < paging.itemCount,
+        onLoadMore = { visibleLimit += 72 },
+        onRetry = { paging.retry() },
         categories = categories,
         selectedCategory = selectedCategory,
         onSelectCategory = viewModel::selectSeriesCategory,
@@ -531,6 +545,12 @@ private fun CatalogBrowseScreen(
     title: String,
     items: List<CatalogItem>,
     pagingLoading: Boolean,
+    pagingError: Boolean,
+    appendLoading: Boolean,
+    appendError: Boolean,
+    hasMore: Boolean,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
     categories: List<VodCategoryEntity>,
     selectedCategory: String?,
     onSelectCategory: (String?) -> Unit,
@@ -577,10 +597,12 @@ private fun CatalogBrowseScreen(
                     }
                     if (pagingLoading && items.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Loading your library…", color = CatalogQuiet, fontSize = 14.sp) }
+                    } else if (pagingError && items.isEmpty()) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CatalogCategoryOption("Loading failed — Retry", false, onClick = onRetry) }
                     } else if (items.isEmpty()) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No titles are available in this category.", color = CatalogQuiet, fontSize = 14.sp) }
                     } else {
-                        CatalogRows(items, categories, selectedCategory, firstCardFocus)
+                        CatalogRows(items, categories, selectedCategory, firstCardFocus, hasMore, appendLoading, appendError, onLoadMore, onRetry)
                     }
                 }
             }
@@ -720,12 +742,12 @@ private fun CatalogCategoryOption(label: String, selected: Boolean, focusRequest
 }
 
 @Composable
-private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEntity>, selectedCategory: String?, firstFocus: FocusRequester) {
+private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEntity>, selectedCategory: String?, firstFocus: FocusRequester, hasMore: Boolean, appendLoading: Boolean, appendError: Boolean, onLoadMore: () -> Unit, onRetry: () -> Unit) {
     val names = remember(categories) { categories.associate { it.providerId to it.name } }
     val groups = if (selectedCategory != null) {
         items.chunked(6).mapIndexed { index, row -> (if (index == 0) names[selectedCategory] ?: "SELECTED CATEGORY" else "MORE TO EXPLORE") to row }
     } else {
-        items.groupBy { it.categoryId }.map { (id, row) -> (names[id] ?: "RECENTLY ADDED") to row.take(6) }
+        items.groupBy { it.categoryId }.map { (id, row) -> (names[id] ?: "RECENTLY ADDED") to row }
     }
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         items(groups, key = { it.first + it.second.firstOrNull()?.id }) { (label, rowItems) ->
@@ -750,6 +772,9 @@ private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEn
                 }
             }
         }
+        if (appendError) item { CatalogCategoryOption("More titles failed — Retry", false, onClick = onRetry) }
+        else if (appendLoading) item { Text("Loading more titles…", color = CatalogQuiet) }
+        else if (hasMore) item { CatalogCategoryOption("Load more titles", false, onClick = onLoadMore) }
     }
 }
 
