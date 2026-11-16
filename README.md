@@ -14,10 +14,10 @@ OH does not bundle or supply IPTV content.
 
 ### First-time setup
 
-1. Offer **Finish setup on your phone** and **Enter details on TV**.
-2. Phone setup opens a temporary web page hosted by the TV itself at `http://<TV-LAN-IP>:8765`; the phone must be on the same local network.
+1. On a fresh installation (or whenever there is no saved account), **open the Phone Pairing screen directly** after launch. Do **not** display a separate setup-method selection screen. The Phone Pairing screen itself must provide a clear action to open manual Xtream setup.
+2. Phone pairing offers the temporary web page hosted by the TV itself at `http://<TV-LAN-IP>:8765`; the phone must be on the same local network. Manual server URL, username and password entry must remain directly accessible from this screen if pairing is not wanted or cannot connect.
 3. Pairing uses a short-lived, one-time session (five minutes) and encrypts submitted provider credentials for the TV before transmission. The server stops on completion, cancellation, or expiration.
-4. Manual input of server URL, username, and password always remains available.
+4. Returning to the Phone Pairing screen from manual setup must not force a separate method-selection step. After removing an account, return directly to Phone Pairing. A returning user with a valid saved account opens the main experience selector instead.
 5. Validate the Xtream account, store credentials securely on the device, and show separate import progress for Live TV, Movies, and TV Shows.
 6. Make successfully imported sections usable even if another section fails. Existing cached content survives recoverable failures.
 7. Open the main experience selector after onboarding.
@@ -102,7 +102,7 @@ TMDB matching and enrichment should happen asynchronously, be cached locally, an
 
 ## Required screens
 
-1. Setup method selection / phone pairing / manual Xtream login
+1. Phone pairing (first screen for users without a saved account) with manual Xtream setup accessible as a fallback; **no setup-choice screen**
 2. Library preparation and sync progress
 3. Main experience selector: Movies / TV Shows / Live TV
 4. Movies browser with IPTV movie categories
