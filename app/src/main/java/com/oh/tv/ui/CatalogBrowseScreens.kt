@@ -8,6 +8,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -727,7 +729,6 @@ private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEn
                             item = item,
                             focusRequester = if (item.id == items.first().id) firstFocus else null,
                             dimmed = previewedCardId != null && previewedCardId != item.id,
-                            expandLeft = index >= 4,
                             onPreviewChanged = { showing ->
                                 if (showing) previewedCardId = item.id else if (previewedCardId == item.id) previewedCardId = null
                             },
@@ -744,50 +745,54 @@ private fun CatalogMovieCard(
     item: CatalogItem,
     focusRequester: FocusRequester?,
     dimmed: Boolean,
-    expandLeft: Boolean,
     onPreviewChanged: (Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     var preview by remember { mutableStateOf(false) }
-    val surroundingScale by animateFloatAsState(if (dimmed) 0.96f else 1f, tween(160), label = "surrounding card scale")
+    val cardWidth by animateDpAsState(
+        targetValue = if (focused) 420.dp else 224.dp,
+        animationSpec = tween(180),
+        label = "layout-aware movie card width",
+    )
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val surroundingAlpha by animateFloatAsState(if (dimmed) 0.5f else 1f, tween(160), label = "surrounding card alpha")
     LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
     LaunchedEffect(focused) {
         preview = false
         onPreviewChanged(false)
         if (focused) {
-            delay(800)
+            // BringIntoView scrolls only if the expanded card is clipped. For the first\n            // card on a normal TV viewport this is a no-op, keeping its left edge fixed.\n            // At the right edge (or on narrow screens) it reveals the full width.
+            delay(200)
+            bringIntoViewRequester.bringIntoView()
+            // Rich metadata remains a still preview until an actual trailer player is wired.
+            delay(4800)
             preview = true
             onPreviewChanged(true)
         }
     }
     Box(
-        Modifier.width(224.dp).height(340.dp).zIndex(if (preview) 3f else if (focused) 2f else 0f)
-            .graphicsLayer { scaleX = surroundingScale; scaleY = surroundingScale; alpha = surroundingAlpha }
+        Modifier.width(cardWidth).height(340.dp)
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .graphicsLayer { alpha = surroundingAlpha }
             .onFocusChanged { focused = it.isFocused }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clickable(onClick = item.onOpen),
     ) {
-        if (!preview) CatalogCompactCard(item, focused)
-        AnimatedVisibility(
-            visible = preview,
-            modifier = Modifier.offset(x = if (expandLeft) (-196).dp else 0.dp)
-                .wrapContentSize(Alignment.TopStart, unbounded = true).requiredWidth(420.dp).height(340.dp),
-            enter = fadeIn(tween(160), initialAlpha = 0.75f),
-            exit = fadeOut(tween(120)),
-        ) { CatalogDelayedPreview(item, Modifier.fillMaxSize()) }
+        if (preview) {
+            CatalogDelayedPreview(item, Modifier.fillMaxSize())
+        } else {
+            CatalogCompactCard(item, focused)
+        }
     }
 }
 
 @Composable
 private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
     val shape = RoundedCornerShape(14.dp)
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(160), label = "card scale")
     val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, tween(160), label = "card border")
-    val borderColor by animateColorAsState(if (focused) CatalogBlue else CatalogStroke, tween(160), label = "card border color")
+    val borderColor by animateColorAsState(if (focused) CatalogPeach else CatalogStroke, tween(160), label = "card border color")
     Box(
-        Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(shape).background(CatalogSurface).border(borderWidth, borderColor, shape)
+        Modifier.fillMaxSize().clip(shape).background(CatalogSurface).border(borderWidth, borderColor, shape)
     ) {
         CatalogArtwork(item, Modifier.fillMaxWidth().height(246.dp))
         CatalogGenreBadge(item.genre, Modifier.offset(12.dp, 12.dp))
@@ -802,8 +807,8 @@ private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
 @Composable
 private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier) {
     val shape = RoundedCornerShape(17.dp)
-    Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogBlue, shape)) {
-        CatalogArtwork(item, Modifier.fillMaxWidth().height(218.dp), play = true)
+    Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogPeach, shape)) {
+        CatalogArtwork(item, Modifier.fillMaxWidth().height(218.dp))
         CatalogGenreBadge(item.genre, Modifier.offset(14.dp, 14.dp))
         CatalogRatingBadge(item.rating, Modifier.offset(358.dp, 14.dp))
         Row(
@@ -812,7 +817,7 @@ private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier) {
             horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
             PairingIcon("volume", Color.White, Modifier.size(14.dp))
-            Text("Preview playing", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+            Text("Preview unavailable", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
         }
         Column(Modifier.offset(18.dp, 232.dp).width(384.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(item.title, color = CatalogBright, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
