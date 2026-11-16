@@ -10,7 +10,7 @@ object UrlNormalizer {
         val url = withScheme.toHttpUrlOrNull() ?: throw IllegalArgumentException("Enter a valid server URL")
         require(url.host.isNotBlank()) { "Enter a valid server URL" }
         val segments = url.pathSegments.filter { it.isNotBlank() }.toMutableList()
-        if (segments.lastOrNull().equals("player_api.php", ignoreCase = true)) segments.removeLast()
+        if (segments.lastOrNull().equals("player_api.php", ignoreCase = true)) segments.removeAt(segments.lastIndex)
         val builder = url.newBuilder().encodedPath("/").query(null).fragment(null)
         segments.forEach(builder::addPathSegment)
         return builder.build().toString().trimEnd('/')
