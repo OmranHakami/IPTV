@@ -463,7 +463,15 @@ private fun ManualField(
                 textStyle = androidx.compose.ui.text.TextStyle(color = if (enabled) Bright else Quiet, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                 cursorBrush = SolidColor(Peach),
                 visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                decorationBox = { input -> if (value.isBlank()) Text(placeholder, color = Quiet, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) else input() },
+                decorationBox = { input ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (value.isBlank()) {
+                            Text(placeholder, color = Quiet, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        // Compose the editable inner field even when the placeholder is visible.
+                        input()
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }
                     .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             )
