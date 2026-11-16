@@ -4,6 +4,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class NavigationPolicyTest {
+    @Test fun setupFlowHasNoLegacyOnboardingDestination() {
+        val destinations = Destination.entries.map { it.name }
+        org.junit.Assert.assertFalse("Legacy setup choice must not be reachable", destinations.contains("Onboarding"))
+        org.junit.Assert.assertTrue(destinations.contains("PhonePairing"))
+        org.junit.Assert.assertTrue(destinations.contains("ManualSetup"))
+    }
+
+    @Test fun manualSetupBackReturnsDirectlyToPhonePairing() {
+        val destination = NavigationPolicy.back(Destination.ManualSetup, Destination.Hub, Destination.Hub)
+        assertEquals(Destination.PhonePairing, destination)
+    }
+
     @Test fun playerReturnsToExplicitOrigin() {
         assertEquals(Destination.LiveTv, NavigationPolicy.back(Destination.Player, Destination.Hub, Destination.LiveTv))
         assertEquals(Destination.MovieDetails, NavigationPolicy.back(Destination.Player, Destination.Hub, Destination.MovieDetails))
