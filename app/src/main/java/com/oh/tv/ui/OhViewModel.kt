@@ -39,7 +39,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 
-enum class Destination { Loading, Onboarding, PhonePairing, ManualSetup, Sync, Hub, LiveTv, OnDemand, Movies, TvShows, MovieDetails, SeriesDetails, Search, MyList, Settings, Player }
+enum class Destination { Loading, PhonePairing, ManualSetup, Sync, Hub, LiveTv, OnDemand, Movies, TvShows, MovieDetails, SeriesDetails, Search, MyList, Settings, Player }
 enum class PlaybackType { Live, Movie, Episode }
 enum class PairingPhase { Idle, Creating, Waiting, Received, Unavailable, Expired, Failed }
 
