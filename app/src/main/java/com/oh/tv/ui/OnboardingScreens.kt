@@ -79,9 +79,8 @@ private val Success = Color(0xFF71E5B1)
 
 @Composable
 private fun DesignedScreen(content: @Composable () -> Unit) {
-    val profile = LocalDeviceProfile.current
-    val horizontalPadding = if (profile.isTv) 42.dp else 30.dp
-    val verticalPadding = if (profile.isTv) 24.dp else 18.dp
+    val horizontalPadding = 42.dp
+    val verticalPadding = 24.dp
     Box(
         Modifier.fillMaxSize().background(
             Brush.linearGradient(listOf(Ink, Color(0xFF0D1220), Color(0xFF12101B))),

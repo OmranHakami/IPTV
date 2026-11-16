@@ -23,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,13 +42,11 @@ import com.oh.tv.ui.theme.Graphite
 import com.oh.tv.ui.theme.Muted
 import com.oh.tv.ui.theme.Surface
 import com.oh.tv.ui.theme.WarmWhite
-import com.oh.tv.ui.LocalDeviceProfile
 
 @Composable
 fun Screen(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    val profile = LocalDeviceProfile.current
-    val horizontal = if (profile.isTv) 26.dp else 18.dp
-    val vertical = if (profile.isTv) 16.dp else 14.dp
+    val horizontal = 26.dp
+    val vertical = 16.dp
     Box(modifier.fillMaxSize().background(Graphite).padding(horizontal = horizontal, vertical = vertical)) { content() }
 }
 
@@ -89,11 +86,9 @@ fun FocusSurface(
     borderWidth: androidx.compose.ui.unit.Dp = 3.dp,
     content: @Composable () -> Unit,
 ) {
-    val profile = LocalDeviceProfile.current
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (profile.isTv && focused) 1.035f else 1f, label = "focusScale")
+    val scale by animateFloatAsState(if (focused) 1.035f else 1f, label = "focusScale")
     val shape = RoundedCornerShape(10.dp)
-    val indication = if (profile.isTv) null else LocalIndication.current
     Box(
         modifier
             .zIndex(if (focused) 1f else 0f)
@@ -109,7 +104,7 @@ fun FocusSurface(
             )
             .onFocusChanged { focused = it.isFocused }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = indication, onClick = onClick)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .focusable()
             .padding(contentPadding),
         contentAlignment = Alignment.Center,
