@@ -84,7 +84,6 @@ import com.oh.tv.data.local.SeriesEpisodeEntity
 import com.oh.tv.data.local.PlaybackProgressEntity
 import com.oh.tv.data.SyncScopes
 import com.oh.tv.data.SyncState
-import com.oh.tv.data.remote.AccountInput
 import com.oh.tv.ui.components.FocusSurface
 import com.oh.tv.ui.components.MetadataLine
 import com.oh.tv.ui.components.OhButton
