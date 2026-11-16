@@ -513,6 +513,7 @@ private fun ManualAction(
 @Composable
 fun LibraryPreparationScreen(state: OhUiState, onOpenReady: () -> Unit, onRetry: () -> Unit) {
     val openFocus = remember { FocusRequester() }
+    val retryFocus = remember { FocusRequester() }
     val usable = state.syncProgress.any { it.state in setOf(SyncState.Ready, SyncState.Stale) }
     val failed = state.syncProgress.any { it.state == SyncState.Failed }
     val progressWeight = SyncScopes.userVisible.sumOf { scope ->
@@ -596,6 +597,15 @@ fun LibraryPreparationScreen(state: OhUiState, onOpenReady: () -> Unit, onRetry:
                             },
                             focusRequester = openFocus,
                         )
+                        if (usable && failed && !state.busy) {
+                            LibraryPrimaryAction(
+                                onClick = onRetry,
+                                enabled = true,
+                                loading = false,
+                                label = "Retry failed sections",
+                                focusRequester = retryFocus,
+                            )
+                        }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             PairingIcon("dot", Quiet, Modifier.size(14.dp))
                             Text(if (usable) "Press OK to open ready content" else "Ready sections will unlock automatically", color = Quiet, fontSize = 12.sp)
