@@ -113,7 +113,7 @@ fun OhApp(viewModel: OhViewModel) {
     val catalogCounts by viewModel.catalogCounts.collectAsStateWithLifecycle()
 
     BackHandler(enabled = state.destination !in setOf(Destination.Loading, Destination.PhonePairing, Destination.Hub)) {
-        viewModel.navigate(NavigationPolicy.back(state.destination, state.settingsReturn, state.playerReturn))
+        viewModel.navigate(NavigationPolicy.back(state.destination, state.settingsReturn, state.playerReturn, state.browseReturn))
     }
 
     when (state.destination) {
@@ -171,7 +171,7 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.SeriesDetails -> state.selectedSeries?.let { SeriesDetailsScreen(it, episodes, seriesProgress, state, viewModel::playEpisode, viewModel::toggleFavorite) { viewModel.navigate(Destination.TvShows) } }
             ?: Screen { StatusPanel("TV show unavailable", "The selected TV show is no longer in the local catalog.") }
         Destination.Search -> DesignedSearchScreen(viewModel)
-        Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(Destination.Movies) }
+        Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(state.browseReturn) }
         Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
         Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }

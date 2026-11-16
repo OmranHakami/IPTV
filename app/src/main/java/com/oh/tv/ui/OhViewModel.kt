@@ -74,6 +74,7 @@ data class OhUiState(
     val searchMovies: List<MovieEntity> = emptyList(),
     val searchSeries: List<SeriesEntity> = emptyList(),
     val settingsReturn: Destination = Destination.Hub,
+    val browseReturn: Destination = Destination.Movies,
     val pairing: PairingUiState = PairingUiState(),
 )
 
@@ -272,7 +273,9 @@ class OhViewModel(
             cancelPhonePairing(destination)
             return
         }
-        mutableState.value = mutableState.value.copy(destination = destination, message = null, playbackUrl = null)
+        val current = mutableState.value
+        val origin = if (destination in setOf(Destination.Search, Destination.MyList) && current.destination !in setOf(Destination.Search, Destination.MyList)) current.destination else current.browseReturn
+        mutableState.value = current.copy(destination = destination, browseReturn = origin, message = null, playbackUrl = null)
     }
 
     fun openSettings(from: Destination) {

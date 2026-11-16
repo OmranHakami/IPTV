@@ -30,6 +30,13 @@ class NavigationPolicyTest {
         assertEquals(Destination.PhonePairing, NavigationPolicy.back(Destination.ManualSetup, Destination.Hub, Destination.Hub))
     }
 
+    @Test fun searchAndMyListReturnToTheirCaller() {
+        for (origin in listOf(Destination.LiveTv, Destination.TvShows, Destination.Movies, Destination.OnDemand)) {
+            assertEquals(origin, NavigationPolicy.back(Destination.Search, Destination.Hub, Destination.Hub, origin))
+            assertEquals(origin, NavigationPolicy.back(Destination.MyList, Destination.Hub, Destination.Hub, origin))
+        }
+    }
+
     @Test fun browseScreensReturnThroughTheNewMediaHome() {
         assertEquals(Destination.Hub, NavigationPolicy.back(Destination.Movies, Destination.Hub, Destination.Hub))
         assertEquals(Destination.Movies, NavigationPolicy.back(Destination.Search, Destination.Hub, Destination.Hub))
