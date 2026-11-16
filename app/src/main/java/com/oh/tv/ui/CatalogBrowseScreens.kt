@@ -1,6 +1,14 @@
 package com.oh.tv.ui
 
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.activity.compose.BackHandler
+import com.oh.tv.BuildConfig
+import com.oh.tv.data.remote.TmdbTrailerGateway
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -98,6 +106,8 @@ private data class CatalogItem(
     val rating: Double?,
     val overview: String?,
     val metadataKey: Long?,
+    val tmdbId: Long? = null,
+    val trailerType: String = "movie",
     val saved: Boolean,
     val onVisible: () -> Unit,
     val onToggleSaved: () -> Unit,
@@ -123,6 +133,7 @@ fun DesignedMovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
             rating = movie.tmdbRating ?: movie.providerRating,
             overview = movie.displayOverview,
             metadataKey = movie.metadataUpdatedAt,
+            tmdbId = movie.tmdbId,
             saved = movie.providerId in favoriteIds,
             onVisible = { viewModel.loadMovieMetadata(movie) },
             onToggleSaved = { viewModel.toggleFavorite(movie) },
@@ -165,6 +176,8 @@ fun DesignedSeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
             rating = show.tmdbRating ?: show.providerRating,
             overview = show.displayOverview,
             metadataKey = show.metadataUpdatedAt,
+            tmdbId = show.tmdbId,
+            trailerType = "tv",
             saved = show.providerId in favoriteIds,
             onVisible = { viewModel.loadSeriesMetadata(show) },
             onToggleSaved = { viewModel.toggleFavorite(show) },
@@ -206,7 +219,7 @@ fun DesignedSearchScreen(viewModel: OhViewModel) {
                 genre = movie.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "MOVIE",
                 year = movie.displayReleaseDate?.take(4).orEmpty(), runtime = movie.runtimeMinutes?.let(::formatRuntime),
                 rating = movie.tmdbRating ?: movie.providerRating, overview = movie.displayOverview,
-                metadataKey = movie.metadataUpdatedAt, saved = movie.providerId in movieFavoriteIds,
+                metadataKey = movie.metadataUpdatedAt, tmdbId = movie.tmdbId, saved = movie.providerId in movieFavoriteIds,
                 onVisible = { viewModel.loadMovieMetadata(movie) }, onToggleSaved = { viewModel.toggleFavorite(movie) },
                 onOpen = { viewModel.openMovie(movie) },
             ),
@@ -220,7 +233,7 @@ fun DesignedSearchScreen(viewModel: OhViewModel) {
                 genre = show.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "SERIES",
                 year = show.displayReleaseDate?.take(4).orEmpty(), runtime = null,
                 rating = show.tmdbRating ?: show.providerRating, overview = show.displayOverview,
-                metadataKey = show.metadataUpdatedAt, saved = show.providerId in seriesFavoriteIds,
+                metadataKey = show.metadataUpdatedAt, tmdbId = show.tmdbId, trailerType = "tv", saved = show.providerId in seriesFavoriteIds,
                 onVisible = { viewModel.loadSeriesMetadata(show) }, onToggleSaved = { viewModel.toggleFavorite(show) },
                 onOpen = { viewModel.openSeries(show) },
             ),
@@ -748,7 +761,8 @@ private fun CatalogMovieCard(
     onPreviewChanged: (Boolean) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    var preview by remember { mutableStateOf(false) }
+    var trailerKey by remember(item.id, item.tmdbId) { mutableStateOf<String?>(null) }
+    val gateway = remember { TmdbTrailerGateway(BuildConfig.TMDB_API_KEY) }
     val cardWidth by animateDpAsState(
         targetValue = if (focused) 420.dp else 224.dp,
         animationSpec = tween(180),
@@ -757,17 +771,22 @@ private fun CatalogMovieCard(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val surroundingAlpha by animateFloatAsState(if (dimmed) 0.5f else 1f, tween(160), label = "surrounding card alpha")
     LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
-    LaunchedEffect(focused) {
-        preview = false
+    LaunchedEffect(focused, item.tmdbId, item.id) {
+        trailerKey = null
         onPreviewChanged(false)
         if (focused) {
-            // BringIntoView scrolls only if the expanded card is clipped. For the first\n            // card on a normal TV viewport this is a no-op, keeping its left edge fixed.\n            // At the right edge (or on narrow screens) it reveals the full width.
             delay(200)
             bringIntoViewRequester.bringIntoView()
-            // Rich metadata remains a still preview until an actual trailer player is wired.
+            // No network request or playback until focus remains uninterrupted for 5 seconds.
             delay(4800)
-            preview = true
-            onPreviewChanged(true)
+            val id = item.tmdbId
+            if (id != null) {
+                val key = gateway.trailerKey(item.trailerType, id)
+                if (key != null) {
+                    trailerKey = key
+                    onPreviewChanged(true)
+                }
+            }
         }
     }
     Box(
@@ -778,11 +797,7 @@ private fun CatalogMovieCard(
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clickable(onClick = item.onOpen),
     ) {
-        if (preview) {
-            CatalogDelayedPreview(item, Modifier.fillMaxSize())
-        } else {
-            CatalogCompactCard(item, focused)
-        }
+        CatalogDelayedPreview(item, Modifier.fillMaxSize(), trailerKey, focused)
     }
 }
 
@@ -805,20 +820,28 @@ private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
 }
 
 @Composable
-private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier) {
+private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier, trailerKey: String?, focused: Boolean) {
     val shape = RoundedCornerShape(17.dp)
     Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogPeach, shape)) {
         CatalogArtwork(item, Modifier.fillMaxWidth().height(218.dp))
+        if (trailerKey != null && focused) {
+            // Dispose WebView immediately on focus loss to stop playback and release resources.
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        webViewClient = WebViewClient()
+                        setBackgroundColor(android.graphics.Color.BLACK)
+                        loadUrl("https://www.youtube-nocookie.com/embed/$trailerKey?autoplay=1&controls=0&playsinline=1&rel=0")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(218.dp),
+                onRelease = { view -> view.stopLoading(); view.loadUrl("about:blank"); view.destroy() },
+            )
+        }
         CatalogGenreBadge(item.genre, Modifier.offset(14.dp, 14.dp))
         CatalogRatingBadge(item.rating, Modifier.offset(358.dp, 14.dp))
-        Row(
-            Modifier.offset(16.dp, 174.dp).height(34.dp).clip(RoundedCornerShape(9.dp)).background(Color(0xCC090B10))
-                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(9.dp)).padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PairingIcon("volume", Color.White, Modifier.size(14.dp))
-            Text("Preview unavailable", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
-        }
         Column(Modifier.offset(18.dp, 232.dp).width(384.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(item.title, color = CatalogBright, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             CatalogMetadata(item)
