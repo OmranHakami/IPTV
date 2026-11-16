@@ -87,7 +87,7 @@ TMDB matching and enrichment should happen asynchronously, be cached locally, an
 - Use paging and bounded processing for providers with tens of thousands of channels, movies, or episodes.
 - Import Live TV, Movies, and TV Shows independently, with clear progress, partial success, retry, and stale-cache states.
 - A failed or cancelled refresh must not destroy the last usable catalog or personal viewing state.
-- Database upgrades must preserve accounts, favorites, and watch history/progress. Avoid destructive fallback behavior for irreplaceable user state.
+- **Fresh-install-only release policy:** each release is evaluated as a clean installation with a newly created local database. Preserving or migrating databases from earlier installed app versions is out of scope; old app data may be discarded when installing a new release. Within a running installation, normal refreshes, recoverable failures, and playback updates must still preserve the current account, favorites, and viewing progress.
 - Secure Xtream credentials using Android Keystore-backed storage; never expose raw credentials in diagnostic messages or logs.
 - Keep a secure local pairing boundary on **HTTP port 8765**. Do not add cloud pairing, mandatory HTTPS pairing, remote activation, or an unrelated backend service.
 
@@ -122,7 +122,7 @@ TMDB matching and enrichment should happen asynchronously, be cached locally, an
 - **Categories:** Movies and TV Shows use the distinct IPTV categories supplied by the provider.
 - **Focus and preview:** immediate small expansion, exactly five seconds of continuous focus before attempting trailer playback, and cancellation on focus loss.
 - **Navigation:** orange focus follows the selected control; home labels are centered without arrows.
-- **Resilience:** offline cached browsing, interrupted-sync recovery, and database-upgrade retention are tested.
+- **Resilience:** fresh-install database creation, current-installation data integrity, offline cached browsing, and interrupted-sync recovery are tested. Historical database upgrades are not required.
 - **Security:** LAN-only pairing remains on port 8765; credentials and playback URLs stay private.
 - **Performance:** large catalog navigation stays responsive without unbounded memory loading.
 - **Playback:** live, movie, and episode playback plus resume, subtitles, and errors are tested on representative devices.
