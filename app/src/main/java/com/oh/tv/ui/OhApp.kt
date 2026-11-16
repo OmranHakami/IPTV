@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import com.oh.tv.security.SubtitleCredentialStore
@@ -720,7 +721,7 @@ private fun PlayerScreen(url: String, title: String, startPositionMs: Long, save
                                                 MediaItem.SubtitleConfiguration.Builder(Uri.fromFile(file))
                                                     .setMimeType(MimeTypes.APPLICATION_SUBRIP)
                                                     .setLanguage(subtitle.language)
-                                                    .setSelectionFlags(1)
+                                                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
                                                     .build()
                                             )).build()
                                         exoPlayer.setMediaItem(media, position)
