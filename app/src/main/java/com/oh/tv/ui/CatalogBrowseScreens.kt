@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -280,18 +281,20 @@ private fun SearchExperience(
     onBack: () -> Unit,
 ) {
     var filter by remember { mutableStateOf(SearchResultType.All) }
+    val firstResultFocus = remember { FocusRequester() }
     var focusedId by remember(state.searchQuery) { mutableStateOf<String?>(null) }
     val filtered = entries.filter { filter == SearchResultType.All || it.type == filter }
     val focused = filtered.firstOrNull { it.item.id == focusedId } ?: filtered.firstOrNull()
     BackHandler { onBack() }
     Box(Modifier.fillMaxSize().background(CatalogBackground)) {
         Box(Modifier.fillMaxWidth().height(220.dp).background(Brush.verticalGradient(listOf(Color(0xFF111827), CatalogBackground))))
-        SearchNavigation(state.searchQuery, onQuery, onHome, onMovies, onShows, onMyList, onProfile)
+        SearchNavigation(state.searchQuery, onQuery, onHome, onMovies, onShows, onMyList, onProfile, if (filtered.isNotEmpty() && !state.searching && state.searchError == null) firstResultFocus else null)
         when {
             state.searchQuery.isBlank() -> SearchDiscover(state.recentSearches, onQuery)
             state.searching -> SearchLoading(state.searchQuery)
+            state.searchError != null -> SearchFailure(state.searchError, { onQuery(state.searchQuery) })
             entries.isEmpty() -> SearchNoResults(state.searchQuery, onQuery)
-            else -> SearchResults(state.searchQuery, filtered, filter, { filter = it }, focused, { focusedId = it }, onQuery)
+            else -> SearchResults(state.searchQuery, filtered, filter, { filter = it }, focused, { focusedId = it }, onQuery, firstResultFocus)
         }
     }
 }
@@ -305,6 +308,7 @@ private fun SearchNavigation(
     onShows: () -> Unit,
     onMyList: () -> Unit,
     onProfile: () -> Unit,
+    firstResultFocus: FocusRequester?,
 ) {
     Row(
         Modifier.offset(32.dp, 18.dp).width(1376.dp).height(56.dp).clip(RoundedCornerShape(16.dp))
@@ -322,7 +326,7 @@ private fun SearchNavigation(
             CatalogNavItem("My List", false, onMyList)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            SearchInput(query, onQuery)
+            SearchInput(query, onQuery, firstResultFocus)
             var profileFocused by remember { mutableStateOf(false) }
             Box(
                 Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (profileFocused) Color(0xFF263152) else Color(0xFF1A2340))
@@ -335,7 +339,7 @@ private fun SearchNavigation(
 }
 
 @Composable
-private fun SearchInput(query: String, onQuery: (String) -> Unit) {
+private fun SearchInput(query: String, onQuery: (String) -> Unit, firstResultFocus: FocusRequester?) {
     var focused by remember { mutableStateOf(false) }
     val requester = remember { FocusRequester() }
     LaunchedEffect(Unit) { requester.requestFocus() }
@@ -343,7 +347,9 @@ private fun SearchInput(query: String, onQuery: (String) -> Unit) {
         value = query, onValueChange = onQuery, singleLine = true,
         textStyle = androidx.compose.ui.text.TextStyle(color = CatalogBright, fontSize = 12.sp, fontWeight = FontWeight.Bold),
         cursorBrush = SolidColor(CatalogBlue),
-        modifier = Modifier.width(250.dp).height(40.dp).focusRequester(requester).onFocusChanged { focused = it.isFocused },
+        modifier = Modifier.width(250.dp).height(40.dp).focusRequester(requester)
+            .focusProperties { if (firstResultFocus != null) down = firstResultFocus }
+            .onFocusChanged { focused = it.isFocused },
         decorationBox = { field ->
             Row(
                 Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(if (focused) Color(0xFF202839) else CatalogSurface)
@@ -366,7 +372,7 @@ private fun SearchDiscover(recentSearches: List<String>, onQuery: (String) -> Un
     Row(Modifier.offset(48.dp, 108.dp).width(1344.dp).height(660.dp), horizontalArrangement = Arrangement.SpaceBetween) {
         Column(Modifier.width(768.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Text("What do you want to watch?", color = CatalogBright, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-            Text("Use the remote or the on-screen keyboard. Results appear as you type.", color = CatalogQuiet, fontSize = 12.sp)
+            Text("Press OK on the search field to use your TV keyboard. Results appear as you type.", color = CatalogQuiet, fontSize = 12.sp)
             Text("RECENT SEARCHES", color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.3.sp)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (recentSearches.isEmpty()) Text("Your successful searches will appear here.", color = CatalogQuiet, fontSize = 11.sp)
@@ -377,7 +383,6 @@ private fun SearchDiscover(recentSearches: List<String>, onQuery: (String) -> Un
                 listOf("Sci-Fi", "Award winners", "Comedy").forEach { label -> SearchChip(label, false) { onQuery(label) } }
             }
         }
-        SearchKeyboard("", onQuery)
     }
 }
 
@@ -391,6 +396,19 @@ private fun SearchLoading(query: String) {
         Spacer(Modifier.height(18.dp))
         Text("Searching for “$query”", color = CatalogBright, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
         Text("Checking your local movie and TV library…", color = CatalogQuiet, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun SearchFailure(message: String, onRetry: () -> Unit) {
+    Column(
+        Modifier.offset(48.dp, 112.dp).width(1344.dp).height(650.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(message, color = CatalogBright, fontSize = 20.sp)
+        Spacer(Modifier.height(18.dp))
+        SearchChip("Retry search", true, onRetry)
     }
 }
 
@@ -414,7 +432,6 @@ private fun SearchNoResults(query: String, onQuery: (String) -> Unit) {
             Spacer(Modifier.height(18.dp))
             SearchChip("Clear search", true) { onQuery("") }
         }
-        SearchKeyboard(query, onQuery)
     }
 }
 
@@ -427,6 +444,7 @@ private fun SearchResults(
     focused: SearchEntry?,
     onFocused: (String) -> Unit,
     onQuery: (String) -> Unit,
+    firstResultFocus: FocusRequester,
 ) {
     Column(Modifier.offset(32.dp, 106.dp).width(1376.dp).height(672.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         Row(Modifier.fillMaxWidth().height(59.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
@@ -441,8 +459,8 @@ private fun SearchResults(
             }
         }
         LazyRow(Modifier.fillMaxWidth().height(340.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(entries, key = { it.item.id }) { entry ->
-                SearchResultCard(entry, focused?.item?.id == entry.item.id) { onFocused(entry.item.id) }
+            itemsIndexed(entries, key = { _, entry -> entry.item.id }) { index, entry ->
+                SearchResultCard(entry, focused?.item?.id == entry.item.id, if (index == 0) firstResultFocus else null) { onFocused(entry.item.id) }
             }
         }
         focused?.let { SearchFocusedPreview(it, onQuery) }
@@ -450,11 +468,12 @@ private fun SearchResults(
 }
 
 @Composable
-private fun SearchResultCard(entry: SearchEntry, selected: Boolean, onFocused: () -> Unit) {
+private fun SearchResultCard(entry: SearchEntry, selected: Boolean, requester: FocusRequester?, onFocused: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     LaunchedEffect(entry.item.id, entry.item.metadataKey) { entry.item.onVisible() }
     Box(
         Modifier.width(224.dp).height(340.dp).zIndex(if (focused) 2f else 0f)
+            .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
             .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }.clickable(onClick = entry.item.onOpen),
     ) { CatalogCompactCard(entry.item, focused || selected) }
 }
@@ -478,41 +497,6 @@ private fun SearchFocusedPreview(entry: SearchEntry, onQuery: (String) -> Unit) 
             Text("Search related", color = CatalogQuiet, fontSize = 10.sp, modifier = Modifier.clickable { onQuery(entry.item.genre) })
         }
     }
-}
-
-@Composable
-private fun SearchKeyboard(query: String, onQuery: (String) -> Unit) {
-    Column(Modifier.width(520.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("ON-SCREEN KEYBOARD", color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.3.sp)
-        listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM").forEach { keys ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally)) {
-                keys.forEach { key -> SearchKey(key.toString()) { onQuery(query + key.lowercaseChar()) } }
-            }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-            SearchKey("CLEAR", Modifier.width(78.dp)) { onQuery("") }
-            SearchKey("SPACE", Modifier.width(250.dp)) { onQuery(query + " ") }
-            SearchKey("⌫", Modifier.width(78.dp)) { onQuery(query.dropLast(1)) }
-        }
-        Row(
-            Modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF111827)).padding(horizontal = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PairingIcon("remote", CatalogBlue, Modifier.size(18.dp))
-            Text("Navigate with arrows  •  Select to enter  •  Back to close", color = CatalogQuiet, fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-private fun SearchKey(label: String, modifier: Modifier = Modifier.width(42.dp), onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        modifier.height(42.dp).clip(RoundedCornerShape(9.dp)).background(if (focused) CatalogBlue else Color(0xFF182131))
-            .border(1.dp, if (focused) Color.White else Color(0xFF34425A), RoundedCornerShape(9.dp))
-            .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) { Text(label, color = if (focused) CatalogBackground else CatalogBright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold) }
 }
 
 @Composable

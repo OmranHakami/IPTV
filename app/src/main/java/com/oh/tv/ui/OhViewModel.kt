@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
@@ -70,6 +71,7 @@ data class OhUiState(
     val favorite: Boolean = false,
     val searchQuery: String = "",
     val searching: Boolean = false,
+    val searchError: String? = null,
     val recentSearches: List<String> = emptyList(),
     val searchMovies: List<MovieEntity> = emptyList(),
     val searchSeries: List<SeriesEntity> = emptyList(),
@@ -417,23 +419,34 @@ class OhViewModel(
         mutableState.value = mutableState.value.copy(
             searchQuery = query,
             searching = query.isNotBlank(),
+            searchError = null,
             searchMovies = emptyList(),
             searchSeries = emptyList(),
         )
         if (query.isBlank()) return
         searchJob = viewModelScope.launch {
-            delay(250)
-            val movies = repository.searchMovies(account.id, query)
-            val series = repository.searchSeries(account.id, query)
-            val recent = if (movies.isNotEmpty() || series.isNotEmpty()) {
-                (listOf(query.trim()) + mutableState.value.recentSearches.filterNot { it.equals(query.trim(), ignoreCase = true) }).take(3)
-            } else mutableState.value.recentSearches
-            mutableState.value = mutableState.value.copy(
-                searching = false,
-                recentSearches = recent,
-                searchMovies = movies,
-                searchSeries = series,
-            )
+            try {
+                delay(250)
+                val movies = repository.searchMovies(account.id, query)
+                val series = repository.searchSeries(account.id, query)
+                if (mutableState.value.searchQuery != query) return@launch
+                val recent = if (movies.isNotEmpty() || series.isNotEmpty()) {
+                    (listOf(query.trim()) + mutableState.value.recentSearches.filterNot { it.equals(query.trim(), ignoreCase = true) }).take(3)
+                } else mutableState.value.recentSearches
+                mutableState.value = mutableState.value.copy(
+                    searching = false, searchError = null, recentSearches = recent,
+                    searchMovies = movies, searchSeries = series,
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (mutableState.value.searchQuery == query) {
+                    mutableState.value = mutableState.value.copy(
+                        searching = false,
+                        searchError = "Search failed. Check your library and try again.",
+                    )
+                }
+            }
         }
     }
 
