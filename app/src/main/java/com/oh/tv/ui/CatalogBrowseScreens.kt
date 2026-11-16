@@ -761,7 +761,7 @@ private fun CatalogMovieCard(
         preview = false
         onPreviewChanged(false)
         if (focused) {
-            // Wait for the measured width animation, then expose the entire card at row edges.
+            // BringIntoView scrolls only if the expanded card is clipped. For the first\n            // card on a normal TV viewport this is a no-op, keeping its left edge fixed.\n            // At the right edge (or on narrow screens) it reveals the full width.
             delay(200)
             bringIntoViewRequester.bringIntoView()
             // Rich metadata remains a still preview until an actual trailer player is wired.
@@ -786,7 +786,6 @@ private fun CatalogMovieCard(
     }
 }
 
-@Composable
 @Composable
 private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
     val shape = RoundedCornerShape(14.dp)
