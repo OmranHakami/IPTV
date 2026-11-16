@@ -369,7 +369,7 @@ class OhRepository(
                         accountId = account.id,
                         providerId = id,
                         categoryId = raw["category_id"].asString().orEmpty(),
-                        number = raw["num"].asInt() ?: batchStart + index + 1,
+                        number = raw["num"].asInt() ?: fallbackChannelNumber(batchStart, index),
                         name = raw["name"].asString() ?: "Untitled channel",
                         iconUrl = raw["stream_icon"].asString(),
                         epgChannelId = raw["epg_channel_id"].asString(),
