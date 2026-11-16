@@ -4,7 +4,7 @@
 
 ## Product vision
 
-OH is a fast, polished IPTV player for **Google TV / Android TV and compatible Android tablets**, including touch-first layouts around **11.5-inch tablets**. It connects to a user's own authorized Xtream-compatible IPTV service and provides three clear destinations: **Live TV, Movies, and TV Shows**.
+OH is a fast, polished IPTV player for **Google TV / Android TV**. It connects to a user's own authorized Xtream-compatible IPTV service and provides three clear destinations: **Live TV, Movies, and TV Shows**.
 
 The Android app owns its UI, catalog cache, viewing history, and playback. It talks directly to the user's IPTV provider and, when configured, to metadata/subtitle services. **There is no OH cloud account, required cloud backend, remote pairing service, Redis, or external application database.** Internet access is still required for provider streams and optional third-party metadata/subtitle requests.
 
@@ -28,7 +28,7 @@ OH does not bundle or supply IPTV content.
 - The **orange selection indicator moves with actual D-pad focus**. It must not remain painted on a default destination after focus moves elsewhere.
 - Button labels are **centered**, with no decorative arrows beside their names.
 - Remote navigation must be predictable; the focused item is visually obvious. Back navigation returns to the appropriate previous screen.
-- TV layouts prioritize remote and D-pad use; tablet layouts support touch and do not scale controls excessively large.
+- TV layouts prioritize remote and D-pad navigation.
 
 ### Movies
 
@@ -95,8 +95,8 @@ TMDB matching and enrichment should happen asynchronously, be cached locally, an
 
 - A premium, restrained dark interface with artwork-forward movie/show cards and **orange focus/selection cues**.
 - Clear visual feedback for focused, selected, loading, error, empty, stale, and offline states.
-- Buttons and typography remain legible on TVs without becoming oversized on 11.5-inch tablets.
-- D-pad, OK, Back, and playback controls must remain usable with a TV remote; touch controls must work in the tablet build.
+- Buttons and typography remain legible on TVs.
+- D-pad, OK, Back, and playback controls must remain usable with a TV remote.
 - Every important action must be reachable without relying on a mouse.
 - English is the initial interface language.
 
@@ -117,7 +117,7 @@ TMDB matching and enrichment should happen asynchronously, be cached locally, an
 
 ## What must be verified before calling a change complete
 
-- **TV and tablet:** the feature works in both builds, with correct navigation, focus, layout, and touch behavior.
+- **TV:** the feature works in the Android TV build, with correct remote navigation, focus, and layout behavior.
 - **Source separation:** TMDB enrichment never replaces original IPTV fields; missing TMDB values fall back correctly.
 - **Categories:** Movies and TV Shows use the distinct IPTV categories supplied by the provider.
 - **Focus and preview:** immediate small expansion, exactly five seconds of continuous focus before attempting trailer playback, and cancellation on focus loss.

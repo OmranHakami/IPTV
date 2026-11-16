@@ -41,13 +41,6 @@ android {
             dimension = "device"
             applicationIdSuffix = ".tv"
             versionNameSuffix = "-tv"
-            buildConfigField("String", "DEVICE_PROFILE", "\"tv\"")
-        }
-        create("tablet") {
-            dimension = "device"
-            applicationIdSuffix = ".tablet"
-            versionNameSuffix = "-tablet"
-            buildConfigField("String", "DEVICE_PROFILE", "\"tablet\"")
         }
     }
 

@@ -45,9 +45,8 @@ private val BrowsePeach = Color(0xFFFFB86B)
 
 @Composable
 fun BrowseScreen(content: @Composable () -> Unit) {
-    val profile = LocalDeviceProfile.current
-    val horizontalPadding = if (profile.isTv) 42.dp else 30.dp
-    val verticalPadding = if (profile.isTv) 20.dp else 15.dp
+    val horizontalPadding = 42.dp
+    val verticalPadding = 20.dp
     Box(
         Modifier.fillMaxSize().background(
             Brush.linearGradient(listOf(BrowseInk, Color(0xFF0B101A), Color(0xFF11101A))),

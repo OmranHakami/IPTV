@@ -1,4 +1,4 @@
-# Build-time checks for both Android flavors. Emulator and device UI tests run separately.
+# Build-time checks for the Android TV application. Emulator and device UI tests run separately.
 name: Android CI
 
 on:
@@ -17,17 +17,9 @@ concurrency:
 
 jobs:
   verify:
-    name: ${{ matrix.flavor }} - build, unit tests, lint
+    name: tv - build, unit tests, lint
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - flavor: tv
-            task: Tv
-          - flavor: tablet
-            task: Tablet
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -46,18 +38,18 @@ jobs:
       - name: Build APK, run unit tests, and lint
         run: |
           bash ./gradlew --no-daemon --stacktrace \
-            :app:assemble${{ matrix.task }}Debug \
-            :app:test${{ matrix.task }}DebugUnitTest \
-            :app:lint${{ matrix.task }}Debug
+            :app:assembleTvDebug \
+            :app:testTvDebugUnitTest \
+            :app:lintTvDebug
       - name: Upload build and test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-${{ matrix.flavor }}-diagnostics
+          name: android-tv-diagnostics
           if-no-files-found: warn
           retention-days: 7
           path: |
-            app/build/outputs/apk/${{ matrix.flavor }}/debug/
-            app/build/reports/tests/test${{ matrix.task }}DebugUnitTest/
-            app/build/test-results/test${{ matrix.task }}DebugUnitTest/
+            app/build/outputs/apk/tv/debug/
+            app/build/reports/tests/testTvDebugUnitTest/
+            app/build/test-results/testTvDebugUnitTest/
             app/build/reports/lint-results-*
