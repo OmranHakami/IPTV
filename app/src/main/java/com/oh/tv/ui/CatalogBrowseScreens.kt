@@ -234,6 +234,7 @@ fun DesignedSearchScreen(viewModel: OhViewModel) {
         onShows = { viewModel.navigate(Destination.TvShows) },
         onMyList = { viewModel.navigate(Destination.MyList) },
         onProfile = { viewModel.openSettings(Destination.Search) },
+        onBack = { viewModel.navigate(state.browseReturn) },
     )
 }
 
@@ -247,12 +248,13 @@ private fun SearchExperience(
     onShows: () -> Unit,
     onMyList: () -> Unit,
     onProfile: () -> Unit,
+    onBack: () -> Unit,
 ) {
     var filter by remember { mutableStateOf(SearchResultType.All) }
     var focusedId by remember(state.searchQuery) { mutableStateOf<String?>(null) }
     val filtered = entries.filter { filter == SearchResultType.All || it.type == filter }
     val focused = filtered.firstOrNull { it.item.id == focusedId } ?: filtered.firstOrNull()
-    BackHandler { onMovies() }
+    BackHandler { onBack() }
     Box(Modifier.fillMaxSize().background(CatalogBackground)) {
         Box(Modifier.fillMaxWidth().height(220.dp).background(Brush.verticalGradient(listOf(Color(0xFF111827), CatalogBackground))))
         SearchNavigation(state.searchQuery, onQuery, onHome, onMovies, onShows, onMyList, onProfile)

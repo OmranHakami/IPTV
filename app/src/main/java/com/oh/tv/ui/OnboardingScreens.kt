@@ -741,6 +741,7 @@ fun ExperienceChoiceScreen(
 ) {
     val moviesFocus = remember { FocusRequester() }
     var focusedIndex by remember { mutableStateOf(0) }
+    var focusedUtility by remember { mutableStateOf<String?>(null) }
     var openingIndex by remember { mutableStateOf<Int?>(null) }
     val labels = listOf("Movies", "TV Shows", "Live TV")
     LaunchedEffect(Unit) { moviesFocus.requestFocus() }
@@ -759,8 +760,8 @@ fun ExperienceChoiceScreen(
                         Text("CHROMA", color = Bright, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.8.sp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ChoiceUtilityButton("Reload content", "refresh", onReload)
-                        ChoiceUtilityButton("Settings", "settings", onSettings)
+                        ChoiceUtilityButton("Reload content", "refresh", onReload, onFocused = { focusedUtility = "Reload content" })
+                        ChoiceUtilityButton("Settings", "settings", onSettings, onFocused = { focusedUtility = "Settings" })
                     }
                 }
                 Column(
@@ -781,8 +782,8 @@ fun ExperienceChoiceScreen(
                             Text("Pick an experience to enter. You can switch anytime from the home screen.", color = Quiet, fontSize = 15.sp)
                         }
                         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("${focusedIndex + 1} OF 3", color = Bright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
-                            Text("${labels[focusedIndex]} is focused", color = Quiet, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text(if (focusedUtility == null) "${focusedIndex + 1} OF 3" else "UTILITY", color = Bright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                            Text("${focusedUtility ?: labels[focusedIndex]} is focused", color = Quiet, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     Row(
@@ -793,21 +794,21 @@ fun ExperienceChoiceScreen(
                             icon = "movie", count = counts.movies, unit = "titles", title = "Movies",
                             description = "Blockbusters, favorites and everything you saved — all in one place.",
                             hint = "Press OK to open", action = "Open movies", accent = Peach,
-                            opening = openingIndex == 0, onFocused = { focusedIndex = 0 },
+                            opening = openingIndex == 0, onFocused = { focusedIndex = 0; focusedUtility = null },
                             onClick = { openingIndex = 0; onMovies() }, modifier = Modifier.weight(1f), focusRequester = moviesFocus,
                         )
                         ChoiceExperienceCard(
                             icon = "shows", count = counts.series, unit = "titles", title = "TV Shows",
                             description = "Series, saved episodes and your continue-watching queue.",
                             hint = "Updated now", action = "Open TV shows", accent = Color(0xFF9C7CFF),
-                            opening = openingIndex == 1, onFocused = { focusedIndex = 1 },
+                            opening = openingIndex == 1, onFocused = { focusedIndex = 1; focusedUtility = null },
                             onClick = { openingIndex = 1; onShows() }, modifier = Modifier.weight(1f),
                         )
                         ChoiceExperienceCard(
                             icon = "radio", count = counts.liveChannels, unit = "channels", title = "Live TV",
                             description = "Live channels, sports and a fast, familiar program guide.",
                             hint = "Guide available", action = "Open live TV", accent = Color(0xFF7C9CFF),
-                            opening = openingIndex == 2, onFocused = { focusedIndex = 2 },
+                            opening = openingIndex == 2, onFocused = { focusedIndex = 2; focusedUtility = null },
                             onClick = { openingIndex = 2; onLive() }, modifier = Modifier.weight(1f),
                         )
                     }
@@ -827,13 +828,13 @@ fun ExperienceChoiceScreen(
 }
 
 @Composable
-private fun ChoiceUtilityButton(label: String, icon: String, onClick: () -> Unit) {
+private fun ChoiceUtilityButton(label: String, icon: String, onClick: () -> Unit, onFocused: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(11.dp)
     Row(
         Modifier.height(44.dp).clip(shape).background(if (focused) Color(0xFF202839) else Color.Transparent)
-            .border(if (focused) 2.dp else 1.dp, if (focused) Color(0xFF7C9CFF) else PairingStroke, shape)
-            .onFocusChanged { focused = it.isFocused }
+            .border(if (focused) 2.dp else 1.dp, if (focused) Peach else PairingStroke, shape)
+            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
