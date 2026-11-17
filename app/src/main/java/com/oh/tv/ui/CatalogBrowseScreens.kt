@@ -13,8 +13,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,6 +57,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -791,23 +790,15 @@ private fun CatalogMovieCard(
     var focused by remember { mutableStateOf(false) }
     var trailerKey by remember(item.id, item.tmdbId) { mutableStateOf<String?>(null) }
     val gateway = remember { TmdbTrailerGateway(BuildConfig.TMDB_API_KEY) }
-    val cardWidth by animateDpAsState(
-        targetValue = if (focused) 420.dp else 224.dp,
-        animationSpec = tween(180),
-        label = "layout-aware movie card width",
-    )
-    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val expansion by animateFloatAsState(if (focused) 1f else 224f / 420f, tween(100), label = "movie card expansion")
     val surroundingAlpha by animateFloatAsState(if (dimmed) 0.5f else 1f, tween(160), label = "surrounding card alpha")
-    val elevation by animateDpAsState(if (focused) 12.dp else 0.dp, tween(160), label = "movie card elevation")
     LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
     LaunchedEffect(focused, item.tmdbId, item.id) {
         trailerKey = null
         onPreviewChanged(false)
         if (focused) {
-            delay(200)
-            bringIntoViewRequester.bringIntoView()
             // No network request or playback until focus remains uninterrupted for 5 seconds.
-            delay(4800)
+            delay(5000)
             val id = item.tmdbId
             if (id != null) {
                 val key = gateway.trailerKey(item.trailerType, id)
@@ -819,17 +810,28 @@ private fun CatalogMovieCard(
         }
     }
     Box(
-        Modifier.width(cardWidth).height(340.dp)
+        Modifier.width(224.dp).height(340.dp)
             .zIndex(if (focused) 2f else 0f)
-            .shadow(elevation, RoundedCornerShape(if (focused) 17.dp else 14.dp), clip = false)
-            .bringIntoViewRequester(bringIntoViewRequester)
             .graphicsLayer { alpha = surroundingAlpha }
             .onFocusChanged { focused = it.isFocused }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clickable(onClick = item.onOpen),
     ) {
-        if (focused) CatalogDelayedPreview(item, Modifier.fillMaxSize(), trailerKey)
-        else CatalogCompactCard(item, false)
+        if (focused) {
+            CatalogDelayedPreview(
+                item,
+                Modifier
+                    .wrapContentSize(Alignment.CenterStart, unbounded = true)
+                    .requiredWidth(420.dp)
+                    .height(340.dp)
+                    .shadow(12.dp, RoundedCornerShape(17.dp), clip = false)
+                    .graphicsLayer {
+                        scaleX = expansion
+                        transformOrigin = TransformOrigin(0f, 0.5f)
+                    },
+                trailerKey,
+            )
+        } else CatalogCompactCard(item, false)
     }
 }
 

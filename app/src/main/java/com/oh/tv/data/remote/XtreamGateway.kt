@@ -94,6 +94,8 @@ internal fun Any?.asMap(): Map<String, Any?> = this as? Map<String, Any?> ?: emp
 internal fun Any?.asList(): List<Any?> = this as? List<Any?> ?: emptyList()
 internal fun Any?.asString(): String? = when (this) {
     is String -> takeIf { it.isNotBlank() }
+    is Double -> if (isFinite() && this == toLong().toDouble()) toLong().toString() else toString()
+    is Float -> if (isFinite() && this == toLong().toFloat()) toLong().toString() else toString()
     is Number, is Boolean -> toString()
     else -> null
 }

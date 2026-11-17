@@ -9,6 +9,8 @@ import org.junit.Test
 class TolerantParsingTest {
     @Test fun acceptsStringAndNumberIdentifiers() {
         assertEquals("42", 42.asString())
+        assertEquals("42", 42.0.asString())
+        assertEquals("42.5", 42.5.asString())
         assertEquals(42L, "42".asLong())
         assertNull("not-a-number".asLong())
     }
