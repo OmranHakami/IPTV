@@ -178,7 +178,11 @@ class OhViewModel(
                     sync(account)
                 },
                 onFailure = {
-                    val safeMessage = "OH could not connect. Check the server URL, username and password."
+                    val safeMessage = if (fromPhonePairing) {
+                        "We couldn’t verify the provider. Try the connection again."
+                    } else {
+                        "OH could not connect. Check the server URL, username and password."
+                    }
                     mutableState.value = if (fromPhonePairing) {
                         mutableState.value.copy(
                             busy = false,
@@ -224,7 +228,10 @@ class OhViewModel(
                         )
                     } else {
                         mutableState.value = mutableState.value.copy(
-                            pairing = mutableState.value.pairing.copy(phase = PairingPhase.Received, message = "Verifying your provider…"),
+                            pairing = mutableState.value.pairing.copy(
+                                phase = PairingPhase.Received,
+                                message = "Your provider was confirmed. Connecting this TV now.",
+                            ),
                         )
                         val input = runCatching { crypto.decrypt(chunks) }.getOrElse {
                             localPairingServer.stop()

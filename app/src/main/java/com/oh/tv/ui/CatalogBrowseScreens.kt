@@ -9,13 +9,10 @@ import com.oh.tv.data.remote.TmdbTrailerGateway
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
@@ -54,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -147,7 +145,6 @@ fun DesignedMovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
     }
     CatalogBrowseScreen(
         section = MediaSection.Movies,
-        title = "Movies",
         items = loaded,
         pagingLoading = paging.loadState.refresh is LoadState.Loading,
         pagingError = paging.loadState.refresh is LoadState.Error,
@@ -198,7 +195,6 @@ fun DesignedSeriesCatalogScreen(viewModel: OhViewModel, select: (SeriesEntity) -
     }
     CatalogBrowseScreen(
         section = MediaSection.Shows,
-        title = "TV Shows",
         items = loaded,
         pagingLoading = paging.loadState.refresh is LoadState.Loading,
         pagingError = paging.loadState.refresh is LoadState.Error,
@@ -326,7 +322,7 @@ private fun SearchNavigation(
             CatalogNavItem("Home", false, onHome)
             CatalogNavItem("Movies", true, onMovies)
             CatalogNavItem("TV Shows", false, onShows)
-            CatalogNavItem("My List", false, onMyList)
+            CatalogNavItem("Watchlist", false, onMyList)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             SearchInput(query, onQuery, firstResultFocus)
@@ -540,7 +536,6 @@ private fun SearchChip(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun CatalogBrowseScreen(
     section: MediaSection,
-    title: String,
     items: List<CatalogItem>,
     pagingLoading: Boolean,
     pagingError: Boolean,
@@ -581,7 +576,7 @@ private fun CatalogBrowseScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (categoryName != null) CatalogIconButton("back") { onSelectCategory(null) }
                             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text(categoryName ?: title, color = CatalogBright, fontSize = if (categoryName == null) 28.sp else 24.sp, fontWeight = FontWeight.ExtraBold)
+                                Text(categoryName ?: "All categories", color = CatalogBright, fontSize = if (categoryName == null) 28.sp else 24.sp, fontWeight = FontWeight.ExtraBold)
                                 if (categoryName != null) Text("Browse this category. Press BACK to return to the full library.", color = CatalogQuiet, fontSize = 10.sp)
                             }
                         }
@@ -590,7 +585,6 @@ private fun CatalogBrowseScreen(
                                 onSelectCategory(it)
                                 categoryOpen = false
                             }
-                            CatalogControl("sort", "Newest")
                         }
                     }
                     if (pagingLoading && items.isEmpty()) {
@@ -618,40 +612,59 @@ private fun CatalogNavigation(
     onSearch: () -> Unit,
     onProfile: () -> Unit,
 ) {
-    Row(
+    Box(
         Modifier.offset(32.dp, 18.dp).width(1376.dp).height(56.dp).clip(RoundedCornerShape(16.dp))
-            .background(Color(0xCC0E131E)).border(1.dp, Color(0x0DFFFFFF), RoundedCornerShape(16.dp)).padding(horizontal = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+            .background(Color(0xCC0E131E)).border(1.dp, Color(0x0DFFFFFF), RoundedCornerShape(16.dp)),
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(11.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.align(Alignment.CenterStart).padding(start = 22.dp),
+            horizontalArrangement = Arrangement.spacedBy(11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             androidx.compose.foundation.Image(painterResource(R.drawable.pairing_brand), null, Modifier.size(40.dp))
             Text("CHROMA", color = CatalogBright, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.1.sp)
         }
-        Row(Modifier.height(40.dp).focusGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.align(Alignment.Center).width(417.dp).height(40.dp).focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             CatalogNavItem("Home", section == MediaSection.Home, onHome)
             CatalogNavItem("Movies", section == MediaSection.Movies, onMovies)
             CatalogNavItem("TV Shows", section == MediaSection.Shows, onShows)
-            CatalogNavItem("My List", section == MediaSection.MyList, onMyList)
+            CatalogNavItem("Watchlist", section == MediaSection.MyList, onMyList)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.align(Alignment.CenterEnd).padding(end = 22.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             var searchFocused by remember { mutableStateOf(false) }
+            val searchBackground by animateColorAsState(if (searchFocused) Color(0xFF18233A) else CatalogSurface, tween(140), label = "search background")
+            val searchBorder by animateColorAsState(if (searchFocused) CatalogBlue else Color(0xFF34425A), tween(140), label = "search border")
+            val searchBorderWidth by animateDpAsState(if (searchFocused) 2.dp else 1.dp, tween(140), label = "search border width")
+            val searchIcon by animateColorAsState(if (searchFocused) Color(0xFFB9C7FF) else Color(0xFFAAB5C6), tween(140), label = "search icon")
+            val searchText by animateColorAsState(if (searchFocused) Color.White else Color(0xFFC6CFDD), tween(140), label = "search text")
             Row(
-                Modifier.width(190.dp).height(40.dp).clip(RoundedCornerShape(10.dp)).background(if (searchFocused) Color(0xFF202839) else CatalogSurface)
-                    .border(if (searchFocused) 2.dp else 1.dp, if (searchFocused) CatalogBlue else Color(0xFF34425A), RoundedCornerShape(10.dp))
+                Modifier.width(274.dp).height(40.dp).clip(RoundedCornerShape(10.dp)).background(searchBackground)
+                    .border(searchBorderWidth, searchBorder, RoundedCornerShape(10.dp))
                     .onFocusChanged { searchFocused = it.isFocused }.clickable(onClick = onSearch).padding(horizontal = 13.dp),
                 horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
-                PairingIcon("search", if (searchFocused) CatalogBright else Color(0xFFAAB5C6), Modifier.size(18.dp))
-                Text("Search", color = if (searchFocused) CatalogBright else Color(0xFFC6CFDD), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                PairingIcon("search", searchIcon, Modifier.size(18.dp))
+                Text("Search", color = searchText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
             var profileFocused by remember { mutableStateOf(false) }
+            val profileBackground by animateColorAsState(if (profileFocused) Color(0xFF24325A) else Color(0xFF1A2340), tween(140), label = "profile background")
+            val profileBorder by animateColorAsState(if (profileFocused) CatalogBlue else Color(0x777C9CFF), tween(140), label = "profile border")
+            val profileBorderWidth by animateDpAsState(if (profileFocused) 2.dp else 1.dp, tween(140), label = "profile border width")
+            val profileText by animateColorAsState(if (profileFocused) Color.White else Color(0xFFB9C7FF), tween(140), label = "profile text")
             Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (profileFocused) Color(0xFF263152) else Color(0xFF1A2340))
-                    .border(if (profileFocused) 2.dp else 1.dp, if (profileFocused) CatalogBlue else Color(0x777C9CFF), RoundedCornerShape(12.dp))
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(profileBackground)
+                    .border(profileBorderWidth, profileBorder, RoundedCornerShape(12.dp))
                     .onFocusChanged { profileFocused = it.isFocused }.clickable(onClick = onProfile),
                 contentAlignment = Alignment.Center,
-            ) { Text("OH", color = Color(0xFFB9C7FF), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold) }
+            ) { Text("OH", color = profileText, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold) }
         }
     }
 }
@@ -660,28 +673,17 @@ private fun CatalogNavigation(
 private fun CatalogNavItem(label: String, selected: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(10.dp)
+    val background by animateColorAsState(if (focused) Color(0xFF18233A) else if (selected) CatalogPeach.copy(alpha = 0.09f) else Color.Transparent, tween(140), label = "nav background")
+    val border by animateColorAsState(if (focused) CatalogBlue else CatalogPeach.copy(alpha = 0.4f), tween(140), label = "nav border")
+    val borderWidth by animateDpAsState(if (focused) 2.dp else if (selected) 1.dp else 0.dp, tween(140), label = "nav border width")
+    val textColor by animateColorAsState(if (focused) CatalogBright else if (selected) Color(0xFFFFD09A) else Color(0xFF909CAF), tween(140), label = "nav text")
     Box(
         Modifier.height(40.dp).clip(shape)
-            .background(if (focused) Color(0xFF202839) else if (selected) CatalogPeach.copy(alpha = 0.09f) else Color.Transparent)
-            .border(if (focused) 2.dp else if (selected) 1.dp else 0.dp, if (focused) CatalogBlue else CatalogPeach.copy(alpha = 0.4f), shape)
+            .background(background)
+            .border(borderWidth, border, shape)
             .onFocusChanged { focused = it.isFocused }.clickable(onClick = onClick).padding(horizontal = 17.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = if (focused) CatalogBright else if (selected) Color(0xFFFFD09A) else Color(0xFF909CAF), fontSize = 13.sp, fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold) }
-}
-
-@Composable
-private fun CatalogControl(icon: String, label: String) {
-    var focused by remember { mutableStateOf(false) }
-    Row(
-        Modifier.height(40.dp).clip(RoundedCornerShape(10.dp)).background(if (focused) Color(0xFF202839) else CatalogSurface.copy(alpha = 0.8f))
-            .border(if (focused) 2.dp else 1.dp, if (focused) CatalogBlue else Color(0xFF34425A), RoundedCornerShape(10.dp))
-            .onFocusChanged { focused = it.isFocused }.clickable { }.padding(horizontal = 13.dp),
-        horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PairingIcon(icon, CatalogQuiet, Modifier.size(16.dp))
-        Text(label, color = Color(0xFFF1F4F8), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-        PairingIcon("chevron", CatalogQuiet, Modifier.size(15.dp))
-    }
+    ) { Text(label, color = textColor, fontSize = 13.sp, fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold) }
 }
 
 @Composable
@@ -695,9 +697,12 @@ private fun CatalogCategorySelector(
 ) {
     Box(Modifier.width(206.dp)) {
         var focused by remember { mutableStateOf(false) }
+        val background by animateColorAsState(if (focused || open) Color(0xFF18233A) else CatalogSurface, tween(140), label = "category background")
+        val border by animateColorAsState(if (open) CatalogPeach else if (focused) CatalogBlue else Color(0xFF34425A), tween(140), label = "category border")
+        val borderWidth by animateDpAsState(if (focused || open) 2.dp else 1.dp, tween(140), label = "category border width")
         Row(
-            Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(11.dp)).background(if (focused || open) Color(0xFF202839) else CatalogSurface)
-                .border(if (focused || open) 2.dp else 1.dp, if (focused || open) CatalogBlue else Color(0xFF34425A), RoundedCornerShape(11.dp))
+            Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(11.dp)).background(background)
+                .border(borderWidth, border, RoundedCornerShape(11.dp))
                 .onFocusChanged { focused = it.isFocused }.clickable(onClick = onToggle).padding(horizontal = 13.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -751,7 +756,7 @@ private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEn
         items(groups, key = { it.first + it.second.firstOrNull()?.id }) { (label, rowItems) ->
             var previewedCardId by remember { mutableStateOf<String?>(null) }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(label.uppercase(Locale.US), color = Color(0xFFA8B3C6), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                Text(label.uppercase(Locale.US), color = Color(0xFFA8B3C6), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                 LazyRow(
                     Modifier.fillMaxWidth().height(360.dp),
                     contentPadding = PaddingValues(vertical = 10.dp),
@@ -793,6 +798,7 @@ private fun CatalogMovieCard(
     )
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val surroundingAlpha by animateFloatAsState(if (dimmed) 0.5f else 1f, tween(160), label = "surrounding card alpha")
+    val elevation by animateDpAsState(if (focused) 12.dp else 0.dp, tween(160), label = "movie card elevation")
     LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
     LaunchedEffect(focused, item.tmdbId, item.id) {
         trailerKey = null
@@ -814,13 +820,16 @@ private fun CatalogMovieCard(
     }
     Box(
         Modifier.width(cardWidth).height(340.dp)
+            .zIndex(if (focused) 2f else 0f)
+            .shadow(elevation, RoundedCornerShape(if (focused) 17.dp else 14.dp), clip = false)
             .bringIntoViewRequester(bringIntoViewRequester)
             .graphicsLayer { alpha = surroundingAlpha }
             .onFocusChanged { focused = it.isFocused }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clickable(onClick = item.onOpen),
     ) {
-        CatalogDelayedPreview(item, Modifier.fillMaxSize(), trailerKey, focused)
+        if (focused) CatalogDelayedPreview(item, Modifier.fillMaxSize(), trailerKey)
+        else CatalogCompactCard(item, false)
     }
 }
 
@@ -828,26 +837,26 @@ private fun CatalogMovieCard(
 private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
     val shape = RoundedCornerShape(14.dp)
     val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, tween(160), label = "card border")
-    val borderColor by animateColorAsState(if (focused) CatalogPeach else CatalogStroke, tween(160), label = "card border color")
+    val borderColor by animateColorAsState(if (focused) CatalogBlue else CatalogStroke, tween(160), label = "card border color")
     Box(
         Modifier.fillMaxSize().clip(shape).background(CatalogSurface).border(borderWidth, borderColor, shape)
     ) {
-        CatalogArtwork(item, Modifier.fillMaxWidth().height(246.dp))
+        CatalogArtwork(item, Modifier.fillMaxWidth().height(250.dp))
         CatalogGenreBadge(item.genre, Modifier.offset(12.dp, 12.dp))
         CatalogRatingBadge(item.rating, Modifier.offset(164.dp, 12.dp))
-        Column(Modifier.offset(16.dp, 272.dp).width(192.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Text(item.title, color = CatalogBright, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.offset(16.dp, 268.dp).width(192.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(item.title, color = CatalogBright, fontSize = 15.sp, fontWeight = FontWeight(760), maxLines = 1, overflow = TextOverflow.Ellipsis)
             CatalogMetadata(item)
         }
     }
 }
 
 @Composable
-private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier, trailerKey: String?, focused: Boolean) {
+private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier, trailerKey: String?) {
     val shape = RoundedCornerShape(17.dp)
-    Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogPeach, shape)) {
+    Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogBlue, shape)) {
         CatalogArtwork(item, Modifier.fillMaxWidth().height(218.dp))
-        if (trailerKey != null && focused) {
+        if (trailerKey != null) {
             // Dispose WebView immediately on focus loss to stop playback and release resources.
             AndroidView(
                 factory = { context ->
@@ -881,7 +890,7 @@ private fun CatalogRatingBadge(rating: Double?, modifier: Modifier) {
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             PairingIcon("star", CatalogPeach, Modifier.size(12.dp))
-            Text(rating?.let { String.format(Locale.US, "%.1f", it) } ?: "—", color = CatalogBright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            Text(rating?.let { String.format(Locale.US, "%.1f", it) } ?: "—", color = CatalogBright, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -897,13 +906,13 @@ private fun CatalogArtwork(item: CatalogItem, modifier: Modifier, play: Boolean 
 @Composable
 private fun CatalogGenreBadge(genre: String, modifier: Modifier) {
     Box(modifier.height(24.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xCC090B10)).padding(horizontal = 9.dp), contentAlignment = Alignment.Center) {
-        Text(genre.uppercase(Locale.US), color = CatalogBright, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp, maxLines = 1)
+        Text(genre.uppercase(Locale.US), color = CatalogBright, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp, maxLines = 1)
     }
 }
 
 @Composable
 private fun CatalogMetadata(item: CatalogItem) {
-    Text(listOfNotNull(item.year.takeIf { it.isNotBlank() }, item.runtime).joinToString("  •  "), color = CatalogQuiet, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    Text(listOfNotNull(item.year.takeIf { it.isNotBlank() }, item.runtime).joinToString("  •  "), color = CatalogQuiet, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable

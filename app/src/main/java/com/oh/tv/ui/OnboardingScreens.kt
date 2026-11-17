@@ -1,8 +1,14 @@
 package com.oh.tv.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -76,6 +82,7 @@ import com.oh.tv.data.SyncState
 import com.oh.tv.data.remote.AccountInput
 import com.oh.tv.R
 import com.oh.tv.ui.components.FocusSurface
+import com.oh.tv.ui.theme.Manrope
 import kotlinx.coroutines.delay
 import java.text.NumberFormat
 import java.util.Locale
@@ -148,6 +155,12 @@ fun PhonePairingScreen(state: PairingUiState, onRetry: () -> Unit, onManual: () 
         }
     }
     var copied by remember(state.linkUrl) { mutableStateOf(false) }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(2_000)
+            copied = false
+        }
+    }
     var checked by remember(state.phase, state.code) { mutableStateOf(false) }
     val context = LocalContext.current
     val link = state.linkUrl.substringBefore('?')
@@ -155,6 +168,13 @@ fun PhonePairingScreen(state: PairingUiState, onRetry: () -> Unit, onManual: () 
     val expiring = state.phase == PairingPhase.Waiting && remainingMs in 1..60_000
     val retry = expired || state.phase in setOf(PairingPhase.Failed, PairingPhase.Unavailable, PairingPhase.Idle)
     val loading = state.phase in setOf(PairingPhase.Creating, PairingPhase.Received)
+    val statusPulseTransition = rememberInfiniteTransition(label = "pairingStatusPulse")
+    val statusPulse by statusPulseTransition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "pairingStatusPulse",
+    )
     val primaryFocus = remember { FocusRequester() }
     val manualFocus = remember { FocusRequester() }
     LaunchedEffect(state.phase) { if (loading) manualFocus.requestFocus() else primaryFocus.requestFocus() }
@@ -202,7 +222,9 @@ fun PhonePairingScreen(state: PairingUiState, onRetry: () -> Unit, onManual: () 
                             ) {
                                 Text("VISIT", color = Quiet, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.4.sp)
                                 Text(link.ifBlank { "Preparing link…" }, color = Bright, fontSize = 25.sp, fontWeight = FontWeight.Bold, maxLines = 2)
-                                if (copied) Text("Copied to clipboard", color = Success, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                AnimatedVisibility(copied, enter = fadeIn(tween(150)), exit = fadeOut(tween(150))) {
+                                    Text("Copied to clipboard", color = Success, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                             val codeShape = RoundedCornerShape(14.dp)
                             Column(
@@ -221,21 +243,29 @@ fun PhonePairingScreen(state: PairingUiState, onRetry: () -> Unit, onManual: () 
                             Text("3  This TV connects automatically", color = Color(0xFFCBD3E3), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
                         PairingAction(
-                            label = when { retry -> "Create a new code"; state.phase == PairingPhase.Creating -> "Creating code…"; state.phase == PairingPhase.Received -> "Connecting…"; else -> "Check connection" },
+                            label = when { retry -> "Create a new code"; state.phase == PairingPhase.Creating -> "Creating code…"; state.phase == PairingPhase.Received -> "Connecting…"; else -> "Refresh status" },
                             onClick = { if (retry) onRetry() else { remainingMs = (state.expiresAtEpochMs - System.currentTimeMillis()).coerceAtLeast(0); checked = true } },
                             modifier = Modifier.fillMaxWidth().height(56.dp), focusRequester = primaryFocus, loading = loading, primary = true,
                         )
                     }
                     Column(Modifier.weight(1f).padding(vertical = 24.dp), verticalArrangement = Arrangement.spacedBy(28.dp)) {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            PairingIcon(if (loading) "loading" else if (retry) "alert" else "phone", if (loading) Peach else if (retry) Coral else PairingAccent, Modifier.size(28.dp))
+                            PairingIcon(
+                                if (loading) "loading" else if (retry) "alert" else "phone",
+                                if (loading) Peach else if (retry) Coral else PairingAccent,
+                                Modifier.size(28.dp).graphicsLayer {
+                                    val scale = if (loading || state.phase == PairingPhase.Waiting) statusPulse else 1f
+                                    scaleX = scale
+                                    scaleY = scale
+                                },
+                            )
                             Text(if (expired) "Code expired" else pairingStatusText(state.phase), color = Bright, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                             Text(state.message ?: when {
                                 expired -> "Generate a new code to finish connecting this TV."
                                 state.phase == PairingPhase.Creating -> "Creating a secure session on your local network."
                                 state.phase == PairingPhase.Received -> "Verifying your provider and connecting this TV now."
                                 retry -> "We couldn’t verify the provider. Try the connection again."
-                                checked -> "Still waiting for your phone. Open the link and enter the code to continue."
+                                checked -> "Status refreshed. Still waiting for your phone."
                                 else -> "We’ll update this screen as soon as your provider is confirmed."
                             }, color = Quiet, fontSize = 14.sp, lineHeight = 21.sp)
                         }
@@ -262,9 +292,11 @@ private val PairingAccent = Color(0xFF7C9CFF)
 @Composable
 private fun PairingAction(label: String, onClick: () -> Unit, modifier: Modifier, focusRequester: FocusRequester, loading: Boolean = false, primary: Boolean = false) {
     var focused by remember { mutableStateOf(false) }
+    val focusScale by animateFloatAsState(if (focused) 1.015f else 1f, tween(140), label = "pairingActionFocus")
     val shape = RoundedCornerShape(if (primary) 12.dp else 10.dp)
     Row(
-        modifier.clip(shape).background(if (primary && focused && !loading) Peach else PairingInset)
+        modifier.graphicsLayer { scaleX = focusScale; scaleY = focusScale }
+            .clip(shape).background(if (primary && focused && !loading) Peach else PairingInset)
             .border(if (!primary && focused) 2.dp else 1.dp, when { loading -> PairingAccent; focused -> Peach; else -> PairingStroke }, shape)
             .onFocusChanged { focused = it.isFocused }.focusRequester(focusRequester)
             .clickable(enabled = !loading, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick).padding(horizontal = 14.dp),
@@ -313,7 +345,7 @@ fun PairingIcon(name: String, color: Color, modifier: Modifier) {
             "remote" -> "M9,3 L15,3 Q17,3 17,5 L17,19 Q17,21 15,21 L9,21 Q7,21 7,19 L7,5 Q7,3 9,3 Z M12,7 L12.01,7 M10,11 L14,11 M12,9 L12,13"
             "select" -> "M12,8 A4,4 0,1 1,8,12 A4,4 0,1 1,12,8 M12,2 A10,10 0,1 1,2,12 A10,10 0,1 1,12,2"
             "horizontal" -> "M5,12 L19,12 M9,8 L5,12 L9,16 M15,8 L19,12 L15,16"
-            "search" -> "M11,4 A7,7 0,1 1,4,11 A7,7 0,1 1,11,4 M16,16 L21,21"
+            "search" -> "M19,11 A8,8 0,1 1,3,11 A8,8 0,1 1,19,11 M16.65,16.65 L21,21"
             "grid" -> "M4,4 L10,4 L10,10 L4,10 Z M14,4 L20,4 L20,10 L14,10 Z M4,14 L10,14 L10,20 L4,20 Z M14,14 L20,14 L20,20 L14,20 Z"
             "sort" -> "M4,7 L16,7 M4,12 L13,12 M4,17 L10,17 M18,5 L18,19 M15,16 L18,19 L21,16"
             "chevron" -> "M6,9 L12,15 L18,9"
@@ -334,7 +366,7 @@ fun PairingIcon(name: String, color: Color, modifier: Modifier) {
 
 @Composable
 fun ManualSetupScreen(busy: Boolean, message: String?, onConnect: (AccountInput) -> Unit, onBack: () -> Unit) {
-    var accountName by remember { mutableStateOf("Living Room TV") }
+    var accountName by remember { mutableStateOf("Living room") }
     var server by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -395,7 +427,7 @@ fun ManualSetupScreen(busy: Boolean, message: String?, onConnect: (AccountInput)
                             Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(PairingInset), contentAlignment = Alignment.Center) {
                                 PairingIcon("move", Bright, Modifier.size(16.dp))
                             }
-                            Text("Back closes the keyboard; arrows move between fields", color = Quiet, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Use the remote to move between fields", color = Quiet, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Column(
@@ -405,11 +437,11 @@ fun ManualSetupScreen(busy: Boolean, message: String?, onConnect: (AccountInput)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Text("Provider credentials", color = Bright, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                            Text("Select a field to type. Use Next to continue.", color = Quiet, fontSize = 13.sp)
+                            Text("Use the remote to select a field and open the on-screen keyboard.", color = Quiet, fontSize = 13.sp)
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ManualField(accountName, { accountName = it }, "ACCOUNT NAME", "Living Room TV", "tv", Modifier.width(788.dp), enabled = !busy, focusRequester = accountFocus, nextFocusRequester = serverFocus)
-                            ManualField(server, { server = it }, "SERVER URL", "https://line.provider.tv:8080", "link", Modifier.width(788.dp), enabled = !busy, error = server.isNotBlank() && !validServer, focusRequester = serverFocus, nextFocusRequester = usernameFocus)
+                            ManualField(accountName, { accountName = it }, "ACCOUNT NAME", "Living room", "tv", Modifier.width(788.dp), enabled = !busy, focusRequester = accountFocus, nextFocusRequester = serverFocus)
+                            ManualField(server, { server = it }, "SERVER URL", "https://stream.provider.com", "link", Modifier.width(788.dp), enabled = !busy, error = server.isNotBlank() && !validServer, focusRequester = serverFocus, nextFocusRequester = usernameFocus)
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 ManualField(username, { username = it }, "USERNAME", "Provider username", "user", Modifier.width(388.dp), enabled = !busy, focusRequester = usernameFocus, nextFocusRequester = passwordFocus)
                                 ManualField(password, { password = it }, "PASSWORD", "Provider password", "lock", Modifier.width(388.dp), password = true, enabled = !busy, focusRequester = passwordFocus)
@@ -481,11 +513,13 @@ private fun ManualField(
     }
     LaunchedEffect(editing) { if (editing) inputFocus.requestFocus() }
     val shape = RoundedCornerShape(12.dp)
-    val strokeColor = when { error -> Coral; focused -> Peach; else -> PairingStroke }
+    val accentColor by animateColorAsState(when { error -> Coral; focused -> Peach; else -> Quiet }, tween(140), label = "manualFieldAccent")
+    val strokeColor by animateColorAsState(when { error -> Coral; focused -> Peach; else -> PairingStroke }, tween(140), label = "manualFieldStroke")
+    val strokeWidth by animateDpAsState(if (focused && !error) 2.dp else 1.dp, tween(140), label = "manualFieldStrokeWidth")
     Row(
         modifier.height(76.dp).alpha(if (enabled) 1f else 0.55f).clip(shape)
             .background(if (enabled) PairingInset else Color(0xFF111620))
-            .border(if (focused && !error) 2.dp else 1.dp, strokeColor, shape)
+            .border(strokeWidth, strokeColor, shape)
             .onFocusChanged {
                 focused = it.hasFocus
                 if (!it.hasFocus) editing = false
@@ -500,9 +534,9 @@ private fun ManualField(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PairingIcon(icon, when { error -> Coral; focused -> Peach; else -> Quiet }, Modifier.size(19.dp))
+        PairingIcon(icon, accentColor, Modifier.size(19.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(label, color = if (error) Coral else if (focused) Peach else Quiet, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+            Text(label, color = accentColor, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
             BasicTextField(
                 value = fieldValue,
                 onValueChange = {
@@ -511,7 +545,7 @@ private fun ManualField(
                 },
                 enabled = enabled && editing,
                 singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(color = if (enabled) Bright else Quiet, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                textStyle = androidx.compose.ui.text.TextStyle(color = if (enabled) Bright else Quiet, fontFamily = Manrope, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                 cursorBrush = SolidColor(Peach),
                 visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(imeAction = if (nextFocusRequester == null) ImeAction.Done else ImeAction.Next),
@@ -540,10 +574,13 @@ private fun ManualField(
                     .focusRequester(inputFocus),
             )
         }
-        if (error) {
+        AnimatedVisibility(error, enter = fadeIn(tween(140)), exit = fadeOut(tween(140))) {
             PairingIcon("alert", Coral, Modifier.size(18.dp))
-        } else if (focused) Box(Modifier.height(24.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF2A2119)).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-            Text(if (editing) if (nextFocusRequester == null) "DONE" else "NEXT" else "OK", color = Peach, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+        }
+        AnimatedVisibility(focused && !error, enter = fadeIn(tween(140)), exit = fadeOut(tween(140))) {
+            Box(Modifier.height(24.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF2A2119)).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+                Text(if (editing) if (nextFocusRequester == null) "DONE" else "NEXT" else "OK", color = Peach, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+            }
         }
     }
 }
@@ -559,18 +596,23 @@ private fun ManualAction(
     loading: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val active = enabled || loading
     val shape = RoundedCornerShape(if (primary) 11.dp else 12.dp)
-    val background = when { primary && enabled -> Peach; primary -> Color(0xFF2B3039); focused -> PairingInset; else -> Color.Transparent }
+    val background by animateColorAsState(when { primary && active -> Peach; primary -> Color(0xFF2B3039); focused -> PairingInset; else -> Color.Transparent }, tween(140), label = "manualActionBackground")
+    val borderColor by animateColorAsState(if (focused) Peach else if (primary) background else PairingStroke, tween(140), label = "manualActionBorder")
+    val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, tween(140), label = "manualActionBorderWidth")
+    val focusScale by animateFloatAsState(if (focused && active) 1.02f else 1f, tween(140), label = "manualActionFocus")
     Row(
-        modifier.clip(shape).background(background)
-            .border(if (focused) 2.dp else 1.dp, if (focused) Peach else if (primary) background else PairingStroke, shape)
+        modifier.graphicsLayer { scaleX = focusScale; scaleY = focusScale }.alpha(if (active) 1f else 0.55f)
+            .clip(shape).background(background)
+            .border(borderWidth, borderColor, shape)
             .onFocusChanged { focused = it.isFocused }
             .clickable(enabled = enabled && !loading, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         horizontalArrangement = Arrangement.spacedBy(9.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) PairingIcon(icon, if (primary && enabled) PairingBackground else Quiet, Modifier.size(if (label == null) 20.dp else 17.dp))
-        if (label != null) Text(label, color = if (primary && enabled) PairingBackground else Quiet, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+        if (icon != null) PairingIcon(icon, if (primary && active) PairingBackground else Quiet, Modifier.size(if (label == null) 20.dp else 17.dp))
+        if (label != null) Text(label, color = if (primary && active) PairingBackground else Quiet, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
     }
 }
 
@@ -589,6 +631,8 @@ fun LibraryPreparationScreen(state: OhUiState, onOpenReady: () -> Unit, onRetry:
     }
     val percent = ((progressWeight / SyncScopes.userVisible.size) * 100).toInt().coerceIn(0, 100)
     val progressColor = when { failed && !state.busy -> Coral; percent == 100 -> Success; else -> Peach }
+    val animatedPercent by animateFloatAsState(percent.toFloat(), tween(500), label = "libraryProgress")
+    val animatedProgressColor by animateColorAsState(progressColor, tween(300), label = "libraryProgressColor")
     val prepared = state.syncProgress.sumOf { it.processed }
     val readyProgress = state.syncProgress.filter { it.state in setOf(SyncState.Ready, SyncState.Stale, SyncState.Empty) }
     val readyItems = readyProgress.sumOf { it.processed }
@@ -643,10 +687,10 @@ fun LibraryPreparationScreen(state: OhUiState, onOpenReady: () -> Unit, onRetry:
                         ) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Overall library", color = Color(0xFFCBD3E3), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text(if (failed && !state.busy) "Paused" else "$percent%", color = progressColor, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
+                                Text(if (failed && !state.busy) "Paused" else "${animatedPercent.toInt()}%", color = animatedProgressColor, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                             }
                             Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(PairingInset)) {
-                                Box(Modifier.fillMaxWidth(percent / 100f).fillMaxHeight().background(progressColor))
+                                Box(Modifier.fillMaxWidth(animatedPercent / 100f).fillMaxHeight().background(animatedProgressColor))
                             }
                         }
                         LibraryPrimaryAction(
@@ -738,6 +782,7 @@ private fun LibraryStatusRow(label: String, progress: SyncProgress?) {
         SyncState.Failed -> Coral
         else -> Quiet
     }
+    val animatedAccent by animateColorAsState(accent, tween(240), label = "libraryStatusAccent")
     val icon = when (progress?.state) {
         SyncState.Running -> "loading"
         SyncState.Ready, SyncState.Stale, SyncState.Empty -> "check"
@@ -745,7 +790,7 @@ private fun LibraryStatusRow(label: String, progress: SyncProgress?) {
         else -> "clock"
     }
     val metadata = when (progress?.state) {
-        SyncState.Running -> "${formatCount(progress.processed)} items · preparing"
+        SyncState.Running -> "${formatCount(progress.processed)} items · ${if (label == "Movies") "indexing artwork" else "preparing"}"
         SyncState.Ready, SyncState.Stale -> "${formatCount(progress.processed)} items · available now"
         SyncState.Empty -> "No items found · complete"
         SyncState.Failed -> progress.failure ?: "Couldn’t sync provider metadata"
@@ -757,20 +802,20 @@ private fun LibraryStatusRow(label: String, progress: SyncProgress?) {
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(accent.copy(alpha = 0.09f)), contentAlignment = Alignment.Center) {
-            PairingIcon(icon, accent, Modifier.size(18.dp))
+        Box(Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)).background(animatedAccent.copy(alpha = 0.09f)), contentAlignment = Alignment.Center) {
+            PairingIcon(icon, animatedAccent, Modifier.size(18.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(label, color = Bright, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Text(metadata, color = Quiet, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Row(
-            Modifier.clip(RoundedCornerShape(99.dp)).background(accent.copy(alpha = 0.09f)).padding(horizontal = 11.dp, vertical = 7.dp),
+            Modifier.clip(RoundedCornerShape(99.dp)).background(animatedAccent.copy(alpha = 0.09f)).padding(horizontal = 11.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(accent))
-            Text(stateText, color = accent, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            Box(Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(animatedAccent))
+            Text(stateText, color = animatedAccent, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }
@@ -780,10 +825,15 @@ private fun LibraryPrimaryAction(onClick: () -> Unit, enabled: Boolean, loading:
     var focused by remember { mutableStateOf(false) }
     val active = enabled && !loading
     val shape = RoundedCornerShape(13.dp)
+    val background by animateColorAsState(if (active) Peach else PairingInset, tween(180), label = "libraryActionBackground")
+    val borderColor by animateColorAsState(if (focused && active) Color(0xFFFFF3DE) else if (active) Peach else PairingStroke, tween(180), label = "libraryActionBorder")
+    val borderWidth by animateDpAsState(if (focused && active) 3.dp else 1.dp, tween(180), label = "libraryActionBorderWidth")
+    val focusScale by animateFloatAsState(if (focused && active) 1.015f else 1f, tween(180), label = "libraryActionFocus")
     Row(
-        Modifier.width(500.dp).height(56.dp).alpha(if (active || loading) 1f else 0.45f).clip(shape)
-            .background(if (active) Peach else PairingInset)
-            .border(if (focused && active) 3.dp else 1.dp, if (focused && active) Color(0xFFFFF3DE) else if (active) Peach else PairingStroke, shape)
+        Modifier.width(500.dp).height(56.dp).graphicsLayer { scaleX = focusScale; scaleY = focusScale }
+            .alpha(if (active || loading) 1f else 0.45f).clip(shape)
+            .background(background)
+            .border(borderWidth, borderColor, shape)
             .onFocusChanged { focused = it.isFocused }.focusRequester(focusRequester)
             .clickable(enabled = active, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
@@ -803,12 +853,15 @@ fun ExperienceChoiceScreen(
     onReload: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    val moviesFocus = remember { FocusRequester() }
-    var focusedIndex by remember { mutableStateOf(0) }
-    var focusedUtility by remember { mutableStateOf<String?>(null) }
+    val initialFocus = remember { FocusRequester() }
     var openingIndex by remember { mutableStateOf<Int?>(null) }
-    val labels = listOf("Movies", "TV Shows", "Live TV")
-    LaunchedEffect(Unit) { moviesFocus.requestFocus() }
+    val initialIndex = when {
+        counts.movies > 0 -> 0
+        counts.series > 0 -> 1
+        counts.liveChannels > 0 -> 2
+        else -> -1
+    }
+    LaunchedEffect(initialIndex) { initialFocus.requestFocus() }
     BoxWithConstraints(Modifier.fillMaxSize().background(PairingBackground)) {
         val density = LocalDensity.current
         val scale = minOf(maxWidth.value / 1440f, maxHeight.value / 810f)
@@ -824,8 +877,8 @@ fun ExperienceChoiceScreen(
                         Text("CHROMA", color = Bright, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.8.sp)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        ChoiceUtilityButton("Reload content", "refresh", onReload, onFocused = { focusedUtility = "Reload content" })
-                        ChoiceUtilityButton("Settings", "settings", onSettings, onFocused = { focusedUtility = "Settings" })
+                        ChoiceUtilityButton("Reload content", "refresh", onReload, focusRequester = if (initialIndex == -1) initialFocus else null)
+                        ChoiceUtilityButton("Settings", "settings", onSettings)
                     }
                 }
                 Column(
@@ -835,7 +888,7 @@ fun ExperienceChoiceScreen(
                     Row(
                         Modifier.fillMaxWidth().height(120.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -843,48 +896,34 @@ fun ExperienceChoiceScreen(
                                 Text("CHOOSE WITH YOUR REMOTE", color = Peach, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                             }
                             Text("What do you want to watch?", color = Bright, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-1.5).sp)
-                            Text("Pick an experience to enter. You can switch anytime from the home screen.", color = Quiet, fontSize = 15.sp)
-                        }
-                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(if (focusedUtility == null) "${focusedIndex + 1} OF 3" else "UTILITY", color = Bright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
-                            Text("${focusedUtility ?: labels[focusedIndex]} is focused", color = Quiet, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     Row(
-                        Modifier.fillMaxWidth().height(430.dp).focusGroup(),
+                        Modifier.fillMaxWidth().height(532.dp).focusGroup(),
                         horizontalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         ChoiceExperienceCard(
                             icon = "movie", count = counts.movies, unit = "titles", title = "Movies",
                             description = "Blockbusters, favorites and everything you saved — all in one place.",
                             hint = "Press OK to open", action = "Open movies", accent = Peach,
-                            opening = openingIndex == 0, onFocused = { focusedIndex = 0; focusedUtility = null },
-                            onClick = { openingIndex = 0; onMovies() }, modifier = Modifier.weight(1f), focusRequester = moviesFocus,
+                            opening = openingIndex == 0,
+                            onClick = { openingIndex = 0; onMovies() }, modifier = Modifier.weight(1f), focusRequester = if (initialIndex == 0) initialFocus else null,
                         )
                         ChoiceExperienceCard(
                             icon = "shows", count = counts.series, unit = "titles", title = "TV Shows",
                             description = "Series, saved episodes and your continue-watching queue.",
                             hint = "Updated now", action = "Open TV shows", accent = Color(0xFF9C7CFF),
-                            opening = openingIndex == 1, onFocused = { focusedIndex = 1; focusedUtility = null },
-                            onClick = { openingIndex = 1; onShows() }, modifier = Modifier.weight(1f),
+                            opening = openingIndex == 1,
+                            onClick = { openingIndex = 1; onShows() }, modifier = Modifier.weight(1f), focusRequester = if (initialIndex == 1) initialFocus else null,
                         )
                         ChoiceExperienceCard(
                             icon = "radio", count = counts.liveChannels, unit = "channels", title = "Live TV",
                             description = "Live channels, sports and a fast, familiar program guide.",
                             hint = "Guide available", action = "Open live TV", accent = Color(0xFF7C9CFF),
-                            opening = openingIndex == 2, onFocused = { focusedIndex = 2; focusedUtility = null },
-                            onClick = { openingIndex = 2; onLive() }, modifier = Modifier.weight(1f),
+                            opening = openingIndex == 2,
+                            onClick = { openingIndex = 2; onLive() }, modifier = Modifier.weight(1f), focusRequester = if (initialIndex == 2) initialFocus else null,
                         )
                     }
-                }
-                Row(
-                    Modifier.offset(64.dp, 754.dp).width(1312.dp).height(28.dp),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    ChoiceRemoteHint("select", "OK", "Select")
-                    ChoiceRemoteHint("horizontal", "←  →", "Move focus")
-                    ChoiceRemoteHint("back", "BACK", "Go back")
                 }
             }
         }
@@ -892,13 +931,18 @@ fun ExperienceChoiceScreen(
 }
 
 @Composable
-private fun ChoiceUtilityButton(label: String, icon: String, onClick: () -> Unit, onFocused: () -> Unit) {
+private fun ChoiceUtilityButton(label: String, icon: String, onClick: () -> Unit, focusRequester: FocusRequester? = null) {
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(11.dp)
+    val background by animateColorAsState(if (focused) Color(0xFF202839) else Color.Transparent, tween(140), label = "choiceUtilityBackground")
+    val borderColor by animateColorAsState(if (focused) PairingAccent else PairingStroke, tween(140), label = "choiceUtilityBorder")
+    val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, tween(140), label = "choiceUtilityBorderWidth")
+    val focusScale by animateFloatAsState(if (focused) 1.02f else 1f, tween(140), label = "choiceUtilityFocus")
     Row(
-        Modifier.height(44.dp).clip(shape).background(if (focused) Color(0xFF202839) else Color.Transparent)
-            .border(if (focused) 2.dp else 1.dp, if (focused) Peach else PairingStroke, shape)
-            .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }
+        Modifier.height(44.dp).graphicsLayer { scaleX = focusScale; scaleY = focusScale }.clip(shape).background(background)
+            .border(borderWidth, borderColor, shape)
+            .onFocusChanged { focused = it.isFocused }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -920,20 +964,26 @@ private fun ChoiceExperienceCard(
     action: String,
     accent: Color,
     opening: Boolean,
-    onFocused: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier,
     focusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val available = count > 0
     val shape = RoundedCornerShape(18.dp)
-    val cardBackground = if (focused) Brush.verticalGradient(listOf(Color(0xFF1D1B20), PairingSurface, PairingSurface)) else SolidColor(PairingSurface)
+    val cardBackground = if (focused && available) Brush.verticalGradient(listOf(Color(0xFF1D1B20), PairingSurface, PairingSurface)) else SolidColor(PairingSurface)
+    val borderColor by animateColorAsState(if (focused && available) Peach else PairingStroke, tween(180), label = "choiceCardBorder")
+    val borderWidth by animateDpAsState(if (focused && available) 3.dp else 1.dp, tween(180), label = "choiceCardBorderWidth")
+    val focusScale by animateFloatAsState(if (focused && available) 1.012f else 1f, tween(180), label = "choiceCardFocus")
+    val statusColor by animateColorAsState(when { opening || focused -> Peach; available -> Success; else -> Color(0xFF7E899D) }, tween(180), label = "choiceCardStatus")
+    val statusText = when { opening -> "OPENING"; focused -> "FOCUSED"; available -> "READY"; else -> "UNAVAILABLE" }
     Column(
-        modifier.fillMaxHeight().clip(shape).background(cardBackground)
-            .border(if (focused) 3.dp else 1.dp, if (focused) Peach else PairingStroke, shape)
-            .onFocusChanged { state -> focused = state.isFocused; if (state.isFocused) onFocused() }
+        modifier.fillMaxHeight().graphicsLayer { scaleX = focusScale; scaleY = focusScale }.alpha(if (available) 1f else 0.52f)
+            .clip(shape).background(cardBackground)
+            .border(borderWidth, borderColor, shape)
+            .onFocusChanged { state -> focused = state.isFocused }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .clickable(enabled = !opening, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(enabled = available && !opening, interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(26.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -941,16 +991,16 @@ private fun ChoiceExperienceCard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)).background(PairingInset)
-                        .border(1.dp, if (focused) Peach.copy(alpha = 0.33f) else Color(0xFF334057), RoundedCornerShape(14.dp)),
+                        .border(1.dp, if (focused && available) Peach.copy(alpha = 0.33f) else Color(0xFF334057), RoundedCornerShape(14.dp)),
                     contentAlignment = Alignment.Center,
                 ) { PairingIcon(icon, accent, Modifier.size(24.dp)) }
                 Row(
-                    Modifier.clip(RoundedCornerShape(20.dp)).background(accent.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 7.dp),
+                    Modifier.clip(RoundedCornerShape(20.dp)).background(statusColor.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 7.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(accent))
-                    Text(formatCount(count), color = accent, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold)
+                    Box(Modifier.size(6.dp).clip(RoundedCornerShape(3.dp)).background(statusColor))
+                    Text(statusText, color = statusColor, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -961,28 +1011,19 @@ private fun ChoiceExperienceCard(
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("${formatCount(count)} $unit", color = Quiet, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Text(if (focused) "Press OK to open" else hint, color = if (focused) Peach else Color(0xFF667289), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(if (focused && available) "Press OK to open" else hint, color = if (focused && available) Peach else Color(0xFF667289), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
             Row(
                 Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(12.dp))
-                    .background(if (focused || opening) Brush.horizontalGradient(listOf(if (opening) Color(0xFFE88954) else Peach, Color(0xFFFF936C))) else SolidColor(Color.Transparent))
-                    .border(if (focused) 3.dp else 1.dp, if (focused) Color(0xFFFFF0D5) else PairingStroke, RoundedCornerShape(12.dp)),
+                    .background(if ((focused && available) || opening) Brush.horizontalGradient(listOf(if (opening) Color(0xFFE88954) else Peach, Color(0xFFFF936C))) else SolidColor(Color.Transparent))
+                    .border(if (focused && available) 3.dp else 1.dp, if (focused && available) Color(0xFFFFF0D5) else PairingStroke, RoundedCornerShape(12.dp)),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(if (opening) "Opening…" else action, color = if (focused || opening) Color(0xFF24130C) else Color(0xFFE5EBF5), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
-                if (opening) PairingIcon("loading", Color(0xFF24130C), Modifier.size(18.dp))
+                Text(if (opening) "Opening…" else if (available) action else "Not available", color = if ((focused && available) || opening) Color(0xFF24130C) else Color(0xFFE5EBF5), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                PairingIcon(if (opening) "loading" else if (available) "arrow" else "lock", if ((focused && available) || opening) Color(0xFF24130C) else Color(0xFFE5EBF5), Modifier.size(18.dp))
             }
         }
-    }
-}
-
-@Composable
-private fun ChoiceRemoteHint(icon: String, key: String, label: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        PairingIcon(icon, Color(0xFF718099), Modifier.size(15.dp))
-        Text(key, color = Color(0xFFC8D0DD), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.8.sp)
-        Text(label, color = Color(0xFF718099), fontSize = 11.sp, fontWeight = FontWeight.Bold)
     }
 }
 

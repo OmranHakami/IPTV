@@ -347,7 +347,7 @@ private fun OnDemandScreen(
                 OhButton("Movies", onMovies, primary = true)
                 OhButton("TV Shows", onShows)
                 OhButton("Search", onSearch)
-                OhButton("My List", onMyList)
+                OhButton("Watchlist", onMyList)
             }
             Text("Continue Watching", color = WarmWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             if (continueMovies.isEmpty()) EmptyShelf("Your unfinished movies will appear here")
@@ -419,7 +419,7 @@ private fun MovieDetailsScreen(movie: MovieEntity, favorite: Boolean, message: S
                 ).joinToString("  •  "))
                 Text(movie.displayOverview ?: "Additional information is unavailable. You can still play this movie.", color = WarmWhite, fontSize = 12.sp, lineHeight = 16.sp, modifier = Modifier.fillMaxWidth(0.50f), maxLines = 4, overflow = TextOverflow.Ellipsis)
                 if (message != null) Text(message, color = ErrorRed)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { OhButton("▶  Play", play, primary = true); OhButton(if (favorite) "✓  In My List" else "＋  My List", toggleFavorite) }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { OhButton("▶  Play", play, primary = true); OhButton(if (favorite) "✓  In Watchlist" else "＋  Watchlist", toggleFavorite) }
             }
         }
     }
@@ -484,7 +484,7 @@ private fun SeriesDetailsScreen(
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 OhButton(if (progress != null && progress.positionMs > 5_000) "▶  Continue" else "▶  Start watching", { play(episode) }, primary = true)
-                                OhButton(if (state.favorite) "✓  In My List" else "＋  My List", toggleFavorite)
+                                OhButton(if (state.favorite) "✓  In Watchlist" else "＋  Watchlist", toggleFavorite)
                             }
                         }
                     }
@@ -578,7 +578,7 @@ private fun MyListScreen(
 ) {
     Screen {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-            OhTopBar("My List", back)
+            OhTopBar("Watchlist", back)
             if (movies.isEmpty() && series.isEmpty()) EmptyShelf("Add a movie or TV show to see it here")
             else LazyVerticalGrid(GridCells.Adaptive(118.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(movies, key = { "m:${it.providerId}" }) { movie ->

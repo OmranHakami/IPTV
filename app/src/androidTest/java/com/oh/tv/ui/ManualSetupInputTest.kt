@@ -1,10 +1,8 @@
 package com.oh.tv.ui
 
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import org.junit.Rule
@@ -22,7 +20,7 @@ class ManualSetupInputTest {
         // Account name, server URL, username, password are the four editable fields.
         composeRule.onAllNodes(hasSetTextAction())[1].performTextInput("https://example.invalid")
         composeRule.onAllNodes(hasSetTextAction())[1].assertTextContains("https://example.invalid")
-        composeRule.onNodeWithText("https://line.provider.tv:8080").assertDoesNotExist()
+        composeRule.onNodeWithText("https://stream.provider.com").assertDoesNotExist()
 
         composeRule.onAllNodes(hasSetTextAction())[2].performTextInput("test-user")
         composeRule.onAllNodes(hasSetTextAction())[2].assertTextContains("test-user")

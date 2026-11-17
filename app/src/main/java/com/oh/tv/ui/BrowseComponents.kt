@@ -1,5 +1,6 @@
 package com.oh.tv.ui
 
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -75,7 +76,7 @@ fun MediaNavigationBar(
             NavItem("Home", active == MediaSection.Home, onHome, if (active == MediaSection.Home) initialFocus else null)
             NavItem("Movies", active == MediaSection.Movies, onMovies, if (active == MediaSection.Movies) initialFocus else null)
             NavItem("TV Shows", active == MediaSection.Shows, onShows, if (active == MediaSection.Shows) initialFocus else null)
-            NavItem("My List", active == MediaSection.MyList, onMyList, if (active == MediaSection.MyList) initialFocus else null)
+            NavItem("Watchlist", active == MediaSection.MyList, onMyList, if (active == MediaSection.MyList) initialFocus else null)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             FocusSurface(onSearch, background = BrowsePanel, focusedBackground = Color(0xFF263247), contentPadding = 9.dp) {
