@@ -21,10 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,15 +35,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,8 +101,6 @@ fun OhApp(viewModel: OhViewModel) {
     val channels = viewModel.liveChannels.collectAsLazyPagingItems()
     val episodes by viewModel.episodes.collectAsStateWithLifecycle()
     val seriesProgress by viewModel.seriesProgress.collectAsStateWithLifecycle()
-    val favoriteMovies by viewModel.favoriteMovies.collectAsStateWithLifecycle()
-    val favoriteSeries by viewModel.favoriteSeries.collectAsStateWithLifecycle()
     val continueMovies by viewModel.continueMovies.collectAsStateWithLifecycle()
     val catalogCounts by viewModel.catalogCounts.collectAsStateWithLifecycle()
 
@@ -120,7 +109,7 @@ fun OhApp(viewModel: OhViewModel) {
     }
 
     when (state.destination) {
-        Destination.Loading -> Screen { StatusPanel("OH", "Opening your local library…") }
+        Destination.Loading -> AppLoadingScreen()
         Destination.PhonePairing -> PhonePairingScreen(
             state = state.pairing,
             onRetry = viewModel::startPhonePairing,
@@ -174,34 +163,11 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.SeriesDetails -> state.selectedSeries?.let { SeriesDetailsScreen(it, episodes, seriesProgress, state, viewModel::playEpisode, viewModel::toggleFavorite) { viewModel.navigate(Destination.TvShows) } }
             ?: Screen { StatusPanel("TV show unavailable", "The selected TV show is no longer in the local catalog.") }
         Destination.Search -> DesignedSearchScreen(viewModel)
-        Destination.MyList -> MyListScreen(favoriteMovies, favoriteSeries, viewModel::openMovie, viewModel::openSeries, viewModel::loadMovieMetadata, viewModel::loadSeriesMetadata) { viewModel.navigate(state.browseReturn) }
-        Destination.Settings -> SettingsScreen(state, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
+        Destination.MyList -> DesignedWatchlistScreen(viewModel)
+        Destination.Settings -> SettingsScreen(state, catalogCounts, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
         Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
     }
-}
-
-@Composable
-private fun OhTextField(value: String, onChange: (String) -> Unit, label: String, password: Boolean = false) {
-    var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
-    val focusManager = LocalFocusManager.current
-    LaunchedEffect(value) {
-        if (value != fieldValue.text) fieldValue = fieldValue.copy(text = value, selection = TextRange(value.length))
-    }
-    BasicTextField(
-        value = fieldValue,
-        onValueChange = {
-            fieldValue = it
-            if (it.text != value) onChange(it.text)
-        },
-        singleLine = true,
-        textStyle = androidx.compose.ui.text.TextStyle(color = WarmWhite, fontSize = 14.sp),
-        cursorBrush = SolidColor(FocusBlue),
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        decorationBox = { input -> if (fieldValue.text.isBlank()) Text(label, color = Muted, fontSize = 14.sp) else input() },
-        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation(focusManager, fieldValue)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)).background(Surface).padding(horizontal = 11.dp, vertical = 9.dp),
-    )
 }
 
 @Composable
@@ -564,93 +530,6 @@ private fun remainingLabel(progress: PlaybackProgressEntity): String {
     if (progress.completed) return "Watched"
     val minutes = ((progress.durationMs - progress.positionMs).coerceAtLeast(0) / 60_000)
     return if (minutes > 0) "${minutes}m left" else "Resume"
-}
-
-@Composable
-private fun MyListScreen(
-    movies: List<MovieEntity>,
-    series: List<SeriesEntity>,
-    openMovie: (MovieEntity) -> Unit,
-    openSeries: (SeriesEntity) -> Unit,
-    loadMovie: (MovieEntity) -> Unit,
-    loadSeries: (SeriesEntity) -> Unit,
-    back: () -> Unit,
-) {
-    Screen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(15.dp)) {
-            OhTopBar("Watchlist", back)
-            if (movies.isEmpty() && series.isEmpty()) EmptyShelf("Add a movie or TV show to see it here")
-            else LazyVerticalGrid(GridCells.Adaptive(118.dp), Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(9.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                items(movies, key = { "m:${it.providerId}" }) { movie ->
-                    LaunchedEffect(movie.accountId, movie.providerId, movie.metadataUpdatedAt) { loadMovie(movie) }
-                    MovieCard(movie) { openMovie(movie) }
-                }
-                items(series, key = { "s:${it.providerId}" }) { show ->
-                    LaunchedEffect(show.accountId, show.providerId, show.metadataUpdatedAt) { loadSeries(show) }
-                    SeriesCard(show) { openSeries(show) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsScreen(state: OhUiState, back: () -> Unit, sync: () -> Unit, remove: () -> Unit) {
-    val context = LocalContext.current
-    val credentialStore = remember(context) { SubtitleCredentialStore(context) }
-    var selectedTab by remember { mutableStateOf("Account") }
-    var subtitleKey by remember { mutableStateOf("") }
-    var keyConfigured by remember { mutableStateOf(credentialStore.isConfigured()) }
-    var keyStatus by remember { mutableStateOf<String?>(null) }
-    Screen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            OhTopBar("Settings", back)
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Column(Modifier.width(215.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Account", "Synchronization", "Playback", "Audio & Subtitles", "Parental Controls", "Live TV", "Storage", "Diagnostics", "Startup", "About & Credits").forEach { name ->
-                        MenuItem(name, name == selectedTab) { selectedTab = name }
-                    }
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (selectedTab == "Audio & Subtitles") {
-                        Text("OpenSubtitles API key", color = WarmWhite, fontSize = 19.sp)
-                        Text(if (keyConfigured) "Configured on this device" else "Not configured", color = Muted)
-                        OhTextField(subtitleKey, { subtitleKey = it }, "Enter a new API key", password = true)
-                        OhButton("Save API key", {
-                            if (subtitleKey.isNotBlank()) {
-                                try {
-                                    credentialStore.save(subtitleKey)
-                                    subtitleKey = ""
-                                    keyConfigured = true
-                                    keyStatus = "API key saved securely on this device"
-                                } catch (_: Exception) { keyStatus = "Could not save API key" }
-                            } else keyStatus = "Enter an API key first"
-                        }, Modifier.fillMaxWidth(), primary = true)
-                        OhButton("Remove API key", {
-                            credentialStore.save("")
-                            subtitleKey = ""
-                            keyConfigured = false
-                            keyStatus = "API key removed"
-                        }, Modifier.fillMaxWidth())
-                        keyStatus?.let { Text(it, color = Muted) }
-                    } else {
-                        SettingRow("Subscription status", state.account?.status ?: "Unavailable")
-                        SettingRow("Expires", state.account?.expiresAtEpochSeconds?.let { java.time.Instant.ofEpochSecond(it).toString().take(10) } ?: "Unknown")
-                        SettingRow("Server", state.account?.baseUrl?.substringAfter("://") ?: "Unavailable")
-                        OhButton("Refresh content", sync, Modifier.fillMaxWidth(), primary = true)
-                        OhButton("Remove account", remove, Modifier.fillMaxWidth())
-                        Text("This product can use TMDB data but is not endorsed or certified by TMDB.", color = Muted, fontSize = 13.sp)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable private fun SettingRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Surface).padding(horizontal = 13.dp, vertical = 11.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = WarmWhite); Text(value, color = Muted)
-    }
 }
 
 @Composable

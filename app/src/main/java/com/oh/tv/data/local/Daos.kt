@@ -111,6 +111,9 @@ interface CatalogDao {
     @Query("SELECT movies.* FROM movies INNER JOIN playback_progress ON playback_progress.accountId=movies.accountId AND playback_progress.contentId=movies.providerId WHERE movies.accountId=:accountId AND playback_progress.contentType='movie' AND playback_progress.completed=0 ORDER BY playback_progress.updatedAt DESC LIMIT :limit")
     fun continueMovies(accountId: String, limit: Int = 20): Flow<List<MovieEntity>>
 
+    @Query("SELECT series_episodes.* FROM series_episodes INNER JOIN playback_progress ON playback_progress.accountId=series_episodes.accountId AND playback_progress.contentId=series_episodes.providerId WHERE series_episodes.accountId=:accountId AND playback_progress.contentType='episode' AND playback_progress.completed=0 ORDER BY playback_progress.updatedAt DESC LIMIT :limit")
+    fun continueEpisodes(accountId: String, limit: Int = 20): Flow<List<SeriesEpisodeEntity>>
+
     @Query("DELETE FROM live_categories WHERE accountId = :accountId AND syncGeneration != :generation")
     suspend fun deleteStaleLiveCategories(accountId: String, generation: Long)
 

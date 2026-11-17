@@ -37,7 +37,7 @@ import java.util.Locale
 
 enum class MediaSection { Home, Movies, Shows, MyList }
 
-private val BrowseInk = Color(0xFF070A10)
+private val BrowseInk = Color(0xFF090B10)
 private val BrowsePanel = Color(0xFF151C27)
 private val BrowseStroke = Color(0xFF303A4B)
 private val BrowseBright = Color(0xFFF7F8FC)
@@ -48,11 +48,7 @@ private val BrowsePeach = Color(0xFFFFB86B)
 fun BrowseScreen(content: @Composable () -> Unit) {
     val horizontalPadding = 42.dp
     val verticalPadding = 20.dp
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.linearGradient(listOf(BrowseInk, Color(0xFF0B101A), Color(0xFF11101A))),
-        ).padding(horizontal = horizontalPadding, vertical = verticalPadding),
-    ) { content() }
+    Box(Modifier.fillMaxSize().background(BrowseInk).padding(horizontal = horizontalPadding, vertical = verticalPadding)) { content() }
 }
 
 @Composable

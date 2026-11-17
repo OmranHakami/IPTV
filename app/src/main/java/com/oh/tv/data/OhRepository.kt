@@ -196,6 +196,8 @@ class OhRepository(
     fun favoriteMovies(accountId: String) = database.catalogDao().favoriteMovies(accountId)
     fun favoriteSeries(accountId: String) = database.catalogDao().favoriteSeries(accountId)
     fun continueMovies(accountId: String) = database.catalogDao().continueMovies(accountId)
+    fun continueEpisodes(accountId: String) = database.catalogDao().continueEpisodes(accountId)
+    fun continueWatching(accountId: String) = database.personalDao().continueWatching(accountId)
     suspend fun searchMovies(accountId: String, query: String) = database.catalogDao().searchMovies(accountId, query.trim())
     suspend fun searchSeries(accountId: String, query: String) = database.catalogDao().searchSeries(accountId, query.trim())
 

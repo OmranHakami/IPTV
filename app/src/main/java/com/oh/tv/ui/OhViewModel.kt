@@ -138,6 +138,10 @@ class OhViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val continueMovies = repository.activeAccount.filterNotNull().flatMapLatest { repository.continueMovies(it.id) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val continueEpisodes = repository.activeAccount.filterNotNull().flatMapLatest { repository.continueEpisodes(it.id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val continueWatching = repository.activeAccount.filterNotNull().flatMapLatest { repository.continueWatching(it.id) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val catalogCounts: StateFlow<CatalogCounts> = repository.activeAccount
         .flatMapLatest { account -> if (account == null) flowOf(CatalogCounts()) else repository.catalogCounts(account.id) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CatalogCounts())
@@ -357,14 +361,23 @@ class OhViewModel(
     }
 
     fun playMovie() {
-        val account = mutableState.value.account ?: return
         val movie = mutableState.value.selectedMovie ?: return
+        playMovie(movie, Destination.MovieDetails)
+    }
+
+    fun resumeMovie(movie: MovieEntity) {
+        mutableState.value = mutableState.value.copy(selectedMovie = movie, selectedSeries = null, selectedEpisode = null)
+        playMovie(movie, Destination.MyList)
+    }
+
+    private fun playMovie(movie: MovieEntity, returnTo: Destination) {
+        val account = mutableState.value.account ?: return
         viewModelScope.launch {
             val start = repository.playbackPosition(account.id, "movie", movie.providerId)
             runCatching { repository.moviePlaybackUrl(account, movie) }
                 .onSuccess { mutableState.value = mutableState.value.copy(
                     destination = Destination.Player, playbackUrl = it, playbackType = PlaybackType.Movie,
-                    playbackContentId = movie.providerId, playbackTitle = movie.name, playbackStartMs = start, playerReturn = Destination.MovieDetails,
+                    playbackContentId = movie.providerId, playbackTitle = movie.name, playbackStartMs = start, playerReturn = returnTo,
                 ) }
                 .onFailure { mutableState.value = mutableState.value.copy(message = "This movie could not be opened.") }
         }
@@ -386,6 +399,14 @@ class OhViewModel(
     }
 
     fun playEpisode(episode: SeriesEpisodeEntity) {
+        playEpisode(episode, Destination.SeriesDetails)
+    }
+
+    fun resumeEpisode(episode: SeriesEpisodeEntity) {
+        playEpisode(episode, Destination.MyList)
+    }
+
+    private fun playEpisode(episode: SeriesEpisodeEntity, returnTo: Destination) {
         val account = mutableState.value.account ?: return
         mutableState.value = mutableState.value.copy(selectedEpisode = episode, busy = true, message = null)
         viewModelScope.launch {
@@ -394,7 +415,7 @@ class OhViewModel(
                 .onSuccess { url -> mutableState.value = mutableState.value.copy(
                     destination = Destination.Player, playbackUrl = url, busy = false,
                     playbackType = PlaybackType.Episode, playbackContentId = episode.providerId,
-                    playbackTitle = episode.title, playbackStartMs = start, playerReturn = Destination.SeriesDetails,
+                    playbackTitle = episode.title, playbackStartMs = start, playerReturn = returnTo,
                 ) }
                 .onFailure { mutableState.value = mutableState.value.copy(busy = false, message = "This episode could not be opened.") }
         }

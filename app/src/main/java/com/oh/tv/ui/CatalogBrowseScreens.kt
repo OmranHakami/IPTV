@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -82,7 +83,9 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.oh.tv.R
 import com.oh.tv.data.local.MovieEntity
+import com.oh.tv.data.local.PlaybackProgressEntity
 import com.oh.tv.data.local.SeriesEntity
+import com.oh.tv.data.local.SeriesEpisodeEntity
 import com.oh.tv.data.local.VodCategoryEntity
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -267,6 +270,198 @@ fun DesignedSearchScreen(viewModel: OhViewModel) {
 }
 
 @Composable
+fun DesignedWatchlistScreen(viewModel: OhViewModel) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val movies by viewModel.favoriteMovies.collectAsStateWithLifecycle()
+    val series by viewModel.favoriteSeries.collectAsStateWithLifecycle()
+    val continueMovies by viewModel.continueMovies.collectAsStateWithLifecycle()
+    val continueEpisodes by viewModel.continueEpisodes.collectAsStateWithLifecycle()
+    val progressItems by viewModel.continueWatching.collectAsStateWithLifecycle()
+    val initialFocus = remember { FocusRequester() }
+    var filter by remember { mutableStateOf(SearchResultType.All) }
+    val saved = movies.map { movie ->
+        SearchEntry(
+            CatalogItem(
+                id = "movie:${movie.providerId}", categoryId = movie.categoryId, title = movie.displayName,
+                artworkUrl = movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: movie.providerIconUrl,
+                genre = movie.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "MOVIE",
+                year = movie.displayReleaseDate?.take(4).orEmpty(), runtime = movie.runtimeMinutes?.let(::formatRuntime),
+                rating = movie.tmdbRating ?: movie.providerRating, overview = movie.displayOverview,
+                metadataKey = movie.metadataUpdatedAt, tmdbId = movie.tmdbId, saved = true,
+                onVisible = { viewModel.loadMovieMetadata(movie) }, onToggleSaved = { viewModel.toggleFavorite(movie) },
+                onOpen = { viewModel.openMovie(movie) },
+            ),
+            SearchResultType.Movies,
+        )
+    } + series.map { show ->
+        SearchEntry(
+            CatalogItem(
+                id = "series:${show.providerId}", categoryId = show.categoryId, title = show.displayName,
+                artworkUrl = show.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: show.providerIconUrl,
+                genre = show.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "SERIES",
+                year = show.displayReleaseDate?.take(4).orEmpty(), runtime = null,
+                rating = show.tmdbRating ?: show.providerRating, overview = show.displayOverview,
+                metadataKey = show.metadataUpdatedAt, tmdbId = show.tmdbId, trailerType = "tv", saved = true,
+                onVisible = { viewModel.loadSeriesMetadata(show) }, onToggleSaved = { viewModel.toggleFavorite(show) },
+                onOpen = { viewModel.openSeries(show) },
+            ),
+            SearchResultType.Shows,
+        )
+    }
+    val filtered = saved.filter { filter == SearchResultType.All || it.type == filter }
+    val continueProgress = progressItems.firstOrNull()
+    val continueMovie = continueProgress?.takeIf { it.contentType == "movie" }?.let { progress -> continueMovies.firstOrNull { it.providerId == progress.contentId } }
+    val continueEpisode = continueProgress?.takeIf { it.contentType == "episode" }?.let { progress -> continueEpisodes.firstOrNull { it.providerId == progress.contentId } }
+    val hasContinueCard = continueProgress != null && (continueMovie != null || continueEpisode != null)
+    LaunchedEffect(continueMovie?.providerId, continueEpisode?.providerId, filtered.firstOrNull()?.item?.id) {
+        if (hasContinueCard || filtered.isNotEmpty()) initialFocus.requestFocus()
+    }
+    BackHandler { viewModel.navigate(state.browseReturn) }
+    BoxWithConstraints(Modifier.fillMaxSize().background(CatalogBackground)) {
+        val density = LocalDensity.current
+        val scale = minOf(maxWidth.value / 1440f, maxHeight.value / 810f)
+        CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+            Box(Modifier.align(Alignment.Center).width(1440.dp).height(810.dp).background(CatalogBackground)) {
+                CatalogNavigation(
+                    MediaSection.MyList,
+                    onHome = { viewModel.navigate(Destination.Hub) },
+                    onMovies = { viewModel.navigate(Destination.Movies) },
+                    onShows = { viewModel.navigate(Destination.TvShows) },
+                    onMyList = {},
+                    onSearch = { viewModel.navigate(Destination.Search) },
+                    onProfile = { viewModel.openSettings(Destination.MyList) },
+                )
+                Column(
+                    Modifier.offset(48.dp, 104.dp).width(1344.dp).height(678.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                ) {
+                    Row(Modifier.fillMaxWidth().height(62.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text("Watchlist", color = CatalogBright, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("${saved.size} saved  •  ${progressItems.size} in progress", color = CatalogQuiet, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SearchChip("All", filter == SearchResultType.All) { filter = SearchResultType.All }
+                            SearchChip("Movies", filter == SearchResultType.Movies) { filter = SearchResultType.Movies }
+                            SearchChip("TV Shows", filter == SearchResultType.Shows) { filter = SearchResultType.Shows }
+                        }
+                    }
+                    Column(Modifier.fillMaxWidth().height(205.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Continue watching", color = CatalogBright, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text("Newest progress first", color = CatalogQuiet, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        when {
+                            continueMovie != null -> WatchlistContinueCard(
+                                title = continueMovie.displayName,
+                                artworkUrl = continueMovie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: continueMovie.providerIconUrl,
+                                metadata = listOfNotNull("MOVIE", continueMovie.displayReleaseDate?.take(4)).joinToString("  •  "),
+                                progress = continueProgress,
+                                focusRequester = initialFocus,
+                                onVisible = { viewModel.loadMovieMetadata(continueMovie) },
+                                onResume = { viewModel.resumeMovie(continueMovie) },
+                            )
+                            continueEpisode != null -> WatchlistContinueCard(
+                                title = continueEpisode.title,
+                                artworkUrl = continueEpisode.posterUrl,
+                                metadata = "TV SHOW  •  S${continueEpisode.seasonNumber} E${continueEpisode.episodeNumber}",
+                                progress = continueProgress,
+                                focusRequester = initialFocus,
+                                onResume = { viewModel.resumeEpisode(continueEpisode) },
+                            )
+                            else -> WatchlistEmpty("Your unfinished movies and episodes will appear here", Modifier.width(438.dp).height(172.dp))
+                        }
+                    }
+                    Column(Modifier.fillMaxWidth().height(373.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Saved for later", color = CatalogBright, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                            Text("${filtered.size} titles", color = CatalogQuiet, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                        if (filtered.isEmpty()) WatchlistEmpty("Add a movie or TV show to see it here", Modifier.fillMaxWidth().height(340.dp))
+                        else LazyRow(Modifier.fillMaxWidth().height(340.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            itemsIndexed(filtered, key = { _, entry -> entry.item.id }) { index, entry ->
+                                WatchlistSavedCard(entry.item, if (!hasContinueCard && index == 0) initialFocus else null)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchlistContinueCard(
+    title: String,
+    artworkUrl: String?,
+    metadata: String,
+    progress: PlaybackProgressEntity,
+    focusRequester: FocusRequester,
+    onVisible: () -> Unit = {},
+    onResume: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val border by animateColorAsState(if (focused) CatalogBlue else CatalogStroke, tween(160), label = "continue border")
+    val borderWidth by animateDpAsState(if (focused) 3.dp else 1.dp, tween(160), label = "continue border width")
+    val scale by animateFloatAsState(if (focused) 1.02f else 1f, tween(160), label = "continue scale")
+    val fraction = (progress.positionMs.toFloat() / progress.durationMs.coerceAtLeast(1)).coerceIn(0f, 1f)
+    LaunchedEffect(title, artworkUrl) { onVisible() }
+    Row(
+        Modifier.width(438.dp).height(172.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(if (focused) 12.dp else 0.dp, RoundedCornerShape(16.dp), clip = false)
+            .clip(RoundedCornerShape(16.dp)).background(Brush.horizontalGradient(listOf(Color(0xFF27345B), Color(0xFF111827))))
+            .border(borderWidth, border, RoundedCornerShape(16.dp)).focusRequester(focusRequester)
+            .onFocusChanged { focused = it.isFocused }.clickable(onClick = onResume),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            artworkUrl,
+            title,
+            Modifier.width(120.dp).fillMaxHeight(),
+            contentScale = ContentScale.Crop,
+        )
+        Column(Modifier.weight(1f).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(metadata, color = Color(0xFFB9C7FF), fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+            Text(title, color = CatalogBright, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(watchlistRemainingLabel(progress), color = CatalogQuiet, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF465064))) {
+                Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(CatalogPeach))
+            }
+            Row(
+                Modifier.height(31.dp).clip(RoundedCornerShape(9.dp)).background(if (focused) CatalogBright else Color(0x1AFFFFFF)).padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PairingIcon("play", if (focused) CatalogSurface else CatalogBright, Modifier.size(13.dp))
+                Text("Resume", color = if (focused) CatalogSurface else CatalogBright, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WatchlistSavedCard(item: CatalogItem, focusRequester: FocusRequester?) {
+    var focused by remember { mutableStateOf(false) }
+    LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
+    Box(
+        Modifier.width(224.dp).height(340.dp)
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .onFocusChanged { focused = it.isFocused }.clickable(onClick = item.onOpen),
+    ) { CatalogCompactCard(item, focused, savedBadge = true) }
+}
+
+@Composable
+private fun WatchlistEmpty(message: String, modifier: Modifier) {
+    Box(modifier.clip(RoundedCornerShape(14.dp)).background(CatalogSurface).border(1.dp, CatalogStroke, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+        Text(message, color = CatalogQuiet, fontSize = 12.sp)
+    }
+}
+
+internal fun watchlistRemainingLabel(progress: PlaybackProgressEntity): String {
+    val minutes = ((progress.durationMs - progress.positionMs).coerceAtLeast(0) / 60_000)
+    return if (minutes > 0) "${minutes}m left" else "Resume"
+}
+
+@Composable
 private fun SearchExperience(
     state: OhUiState,
     entries: List<SearchEntry>,
@@ -284,15 +479,20 @@ private fun SearchExperience(
     val filtered = entries.filter { filter == SearchResultType.All || it.type == filter }
     val focused = filtered.firstOrNull { it.item.id == focusedId } ?: filtered.firstOrNull()
     BackHandler { onBack() }
-    Box(Modifier.fillMaxSize().background(CatalogBackground)) {
-        Box(Modifier.fillMaxWidth().height(220.dp).background(Brush.verticalGradient(listOf(Color(0xFF111827), CatalogBackground))))
-        SearchNavigation(state.searchQuery, onQuery, onHome, onMovies, onShows, onMyList, onProfile, if (filtered.isNotEmpty() && !state.searching && state.searchError == null) firstResultFocus else null)
-        when {
-            state.searchQuery.isBlank() -> SearchDiscover(state.recentSearches, onQuery)
-            state.searching -> SearchLoading(state.searchQuery)
-            state.searchError != null -> SearchFailure(state.searchError, { onQuery(state.searchQuery) })
-            entries.isEmpty() -> SearchNoResults(state.searchQuery, onQuery)
-            else -> SearchResults(state.searchQuery, filtered, filter, { filter = it }, focused, { focusedId = it }, onQuery, firstResultFocus)
+    BoxWithConstraints(Modifier.fillMaxSize().background(CatalogBackground)) {
+        val density = LocalDensity.current
+        val scale = minOf(maxWidth.value / 1440f, maxHeight.value / 810f)
+        CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+            Box(Modifier.align(Alignment.Center).width(1440.dp).height(810.dp).background(CatalogBackground)) {
+                SearchNavigation(state.searchQuery, onQuery, onHome, onMovies, onShows, onMyList, onProfile, if (filtered.isNotEmpty() && !state.searching && state.searchError == null) firstResultFocus else null)
+                when {
+                    state.searchQuery.isBlank() -> SearchDiscover(state.recentSearches, onQuery)
+                    state.searching -> SearchLoading(state.searchQuery)
+                    state.searchError != null -> SearchFailure(state.searchError, { onQuery(state.searchQuery) })
+                    entries.isEmpty() -> SearchNoResults(state.searchQuery, onQuery)
+                    else -> SearchResults(state.searchQuery, filtered, filter, { filter = it }, focused, { focusedId = it }, onQuery, firstResultFocus)
+                }
+            }
         }
     }
 }
@@ -565,7 +765,6 @@ private fun CatalogBrowseScreen(
         val scale = minOf(maxWidth.value / 1440f, maxHeight.value / 810f)
         CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
             Box(Modifier.align(Alignment.Center).width(1440.dp).height(810.dp)) {
-                Box(Modifier.fillMaxWidth().height(190.dp).background(Brush.verticalGradient(listOf(Color(0x8818233A), Color.Transparent))))
                 CatalogNavigation(section, onHome, onMovies, onShows, onMyList, onSearch, onProfile)
                 Column(
                     Modifier.offset(32.dp, 94.dp).width(1376.dp).height(716.dp),
@@ -836,7 +1035,7 @@ private fun CatalogMovieCard(
 }
 
 @Composable
-private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
+private fun CatalogCompactCard(item: CatalogItem, focused: Boolean, savedBadge: Boolean = false) {
     val shape = RoundedCornerShape(14.dp)
     val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, tween(160), label = "card border")
     val borderColor by animateColorAsState(if (focused) CatalogBlue else CatalogStroke, tween(160), label = "card border color")
@@ -845,12 +1044,22 @@ private fun CatalogCompactCard(item: CatalogItem, focused: Boolean) {
     ) {
         CatalogArtwork(item, Modifier.fillMaxWidth().height(250.dp))
         CatalogGenreBadge(item.genre, Modifier.offset(12.dp, 12.dp))
-        CatalogRatingBadge(item.rating, Modifier.offset(164.dp, 12.dp))
+        if (savedBadge) CatalogSavedBadge(Modifier.offset(184.dp, 12.dp))
+        else CatalogRatingBadge(item.rating, Modifier.offset(164.dp, 12.dp))
         Column(Modifier.offset(16.dp, 268.dp).width(192.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Text(item.title, color = CatalogBright, fontSize = 15.sp, fontWeight = FontWeight(760), maxLines = 1, overflow = TextOverflow.Ellipsis)
             CatalogMetadata(item)
         }
     }
+}
+
+@Composable
+private fun CatalogSavedBadge(modifier: Modifier) {
+    Box(
+        modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xCC090B10))
+            .border(1.dp, CatalogPeach.copy(alpha = 0.55f), RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center,
+    ) { PairingIcon("bookmark-check", Color(0xFFFFD09A), Modifier.size(14.dp)) }
 }
 
 @Composable

@@ -11,7 +11,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import com.oh.tv.R
 
-val Graphite = Color(0xFF17191D)
+val Graphite = Color(0xFF090B10)
 val Surface = Color(0xFF23262C)
 val SurfaceLifted = Color(0xFF2B2F36)
 val WarmWhite = Color(0xFFF6F3EC)

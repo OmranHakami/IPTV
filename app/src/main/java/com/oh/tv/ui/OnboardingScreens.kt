@@ -87,7 +87,7 @@ import kotlinx.coroutines.delay
 import java.text.NumberFormat
 import java.util.Locale
 
-private val Ink = Color(0xFF070A10)
+private val Ink = Color(0xFF090B10)
 private val Panel = Color(0xFF151C2A)
 private val PanelDeep = Color(0xFF0B1019)
 private val Stroke = Color(0xFF2C3649)
@@ -102,19 +102,7 @@ private val Success = Color(0xFF71E5B1)
 private fun DesignedScreen(content: @Composable () -> Unit) {
     val horizontalPadding = 42.dp
     val verticalPadding = 24.dp
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.linearGradient(listOf(Ink, Color(0xFF0D1220), Color(0xFF12101B))),
-        ),
-    ) {
-        Box(
-            Modifier.size(520.dp).offset(x = 760.dp, y = (-300).dp)
-                .background(Brush.radialGradient(listOf(Color(0x30FF9D66), Color.Transparent)), RoundedCornerShape(260.dp)),
-        )
-        Box(
-            Modifier.size(520.dp).offset(x = (-280).dp, y = 360.dp)
-                .background(Brush.radialGradient(listOf(Color(0x245B7CFF), Color.Transparent)), RoundedCornerShape(260.dp)),
-        )
+    Box(Modifier.fillMaxSize().background(Ink)) {
         Box(Modifier.fillMaxSize().padding(horizontal = horizontalPadding, vertical = verticalPadding)) { content() }
     }
 }
@@ -350,6 +338,7 @@ fun PairingIcon(name: String, color: Color, modifier: Modifier) {
             "sort" -> "M4,7 L16,7 M4,12 L13,12 M4,17 L10,17 M18,5 L18,19 M15,16 L18,19 L21,16"
             "chevron" -> "M6,9 L12,15 L18,9"
             "bookmark" -> "M6,3 L18,3 L18,21 L12,17 L6,21 Z"
+            "bookmark-check" -> "M6,3 L18,3 L18,21 L12,17 L6,21 Z M8.5,10.5 L11,13 L15.5,8.5"
             "star" -> "M12,3 L14.8,8.7 L21,9.6 L16.5,14 L17.6,20.3 L12,17.3 L6.4,20.3 L7.5,14 L3,9.6 L9.2,8.7 Z"
             "info" -> "M12,2 A10,10 0,1 1,2,12 A10,10 0,1 1,12,2 M12,11 L12,17 M12,7 L12.01,7"
             "plus" -> "M12,5 L12,19 M5,12 L19,12"
