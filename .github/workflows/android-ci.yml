@@ -1,4 +1,4 @@
-# Build-time checks for the Android TV application. Emulator and device UI tests run separately.
+# Build-time checks for the Android application. Emulator and device UI tests run separately.
 name: Android CI
 
 on:
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   verify:
-    name: tv - build, unit tests, lint
+    name: build, unit tests, lint
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -38,18 +38,18 @@ jobs:
       - name: Build APK, run unit tests, and lint
         run: |
           bash ./gradlew --no-daemon --stacktrace \
-            :app:assembleTvDebug \
-            :app:testTvDebugUnitTest \
-            :app:lintTvDebug
+            :app:assembleDebug \
+            :app:testDebugUnitTest \
+            :app:lintDebug
       - name: Upload build and test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: android-tv-diagnostics
+          name: android-diagnostics
           if-no-files-found: warn
           retention-days: 7
           path: |
-            app/build/outputs/apk/tv/debug/
-            app/build/reports/tests/testTvDebugUnitTest/
-            app/build/test-results/testTvDebugUnitTest/
+            app/build/outputs/apk/debug/
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testDebugUnitTest/
             app/build/reports/lint-results-*
