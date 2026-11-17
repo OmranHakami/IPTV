@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -254,8 +255,9 @@ class OhViewModel(
         mutableState.value = mutableState.value.copy(destination = Destination.Sync, busy = true, message = null, syncProgress = emptyList())
         viewModelScope.launch {
             val summary = repository.syncAll(account) { update ->
-                val withoutScope = mutableState.value.syncProgress.filterNot { it.scope == update.scope }
-                mutableState.value = mutableState.value.copy(syncProgress = withoutScope + update)
+                mutableState.update { current ->
+                    current.copy(syncProgress = current.syncProgress.filterNot { it.scope == update.scope } + update)
+                }
             }
             val currentDestination = mutableState.value.destination
             mutableState.value = mutableState.value.copy(

@@ -21,7 +21,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.oh.player"
+        applicationId = "com.oh.player.tv"
         minSdk = 28
         targetSdk = 36
         versionCode = 4
@@ -33,15 +33,6 @@ android {
             "\"${tmdbApiKey.replace("\"", "\\\"")}\"",
         )
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    flavorDimensions += "device"
-    productFlavors {
-        create("tv") {
-            dimension = "device"
-            applicationIdSuffix = ".tv"
-            versionNameSuffix = "-tv"
-        }
     }
 
     buildFeatures {

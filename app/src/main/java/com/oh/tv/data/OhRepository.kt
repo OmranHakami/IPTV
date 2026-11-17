@@ -30,11 +30,14 @@ import com.oh.tv.data.remote.asMap
 import com.oh.tv.data.remote.asString
 import com.oh.tv.security.CredentialVault
 import com.oh.tv.security.XtreamCredentials
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -55,7 +58,7 @@ object SyncScopes {
     const val LIVE_TV = "Live TV"
     const val MOVIES = "Movies"
     const val TV_SHOWS = "TV Shows"
-    val userVisible = listOf(LIVE_TV, MOVIES, TV_SHOWS)
+    val userVisible = listOf(MOVIES, TV_SHOWS, LIVE_TV)
 }
 
 data class SyncSummary(val scopes: List<SyncProgress>) {
@@ -135,22 +138,35 @@ class OhRepository(
             return result
         }
 
-        val results = mutableListOf<SyncProgress>()
-        results += scope(SyncScopes.LIVE_TV, { database.catalogDao().liveChannelCount(account.id) }) {
-            syncLiveCategories(account, credentials) { }
-            syncLiveChannels(account, credentials) { onProgress(SyncProgress(SyncScopes.LIVE_TV, it, SyncState.Running)) }
-        }
-        delay(350)
-        results += scope(SyncScopes.MOVIES, { database.catalogDao().movieCount(account.id) }) {
-            syncVodCategories(account, credentials, "movie", "get_vod_categories")
-            syncMovies(account, credentials) { onProgress(SyncProgress(SyncScopes.MOVIES, it, SyncState.Running)) }
-        }
-        delay(350)
-        results += scope(SyncScopes.TV_SHOWS, { database.catalogDao().seriesCount(account.id) }) {
-            syncVodCategories(account, credentials, "series", "get_series_categories")
-            syncSeries(account, credentials) { onProgress(SyncProgress(SyncScopes.TV_SHOWS, it, SyncState.Running)) }
-        }
-        SyncSummary(results)
+        val providerSlots = Semaphore(2)
+        SyncSummary(
+            listOf(
+                async {
+                    providerSlots.withPermit {
+                        scope(SyncScopes.MOVIES, { database.catalogDao().movieCount(account.id) }) {
+                            syncVodCategories(account, credentials, "movie", "get_vod_categories")
+                            syncMovies(account, credentials) { onProgress(SyncProgress(SyncScopes.MOVIES, it, SyncState.Running)) }
+                        }
+                    }
+                },
+                async {
+                    providerSlots.withPermit {
+                        scope(SyncScopes.TV_SHOWS, { database.catalogDao().seriesCount(account.id) }) {
+                            syncVodCategories(account, credentials, "series", "get_series_categories")
+                            syncSeries(account, credentials) { onProgress(SyncProgress(SyncScopes.TV_SHOWS, it, SyncState.Running)) }
+                        }
+                    }
+                },
+                async {
+                    providerSlots.withPermit {
+                        scope(SyncScopes.LIVE_TV, { database.catalogDao().liveChannelCount(account.id) }) {
+                            syncLiveCategories(account, credentials) { }
+                            syncLiveChannels(account, credentials) { onProgress(SyncProgress(SyncScopes.LIVE_TV, it, SyncState.Running)) }
+                        }
+                    }
+                },
+            ).awaitAll(),
+        )
     }
 
     fun liveCategories(accountId: String) = database.catalogDao().observeLiveCategories(accountId)

@@ -1,5 +1,11 @@
 package com.oh.tv.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
@@ -22,6 +28,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -45,11 +53,17 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Density
@@ -264,6 +278,16 @@ private fun PairingAction(label: String, onClick: () -> Unit, modifier: Modifier
 
 @Composable
 fun PairingIcon(name: String, color: Color, modifier: Modifier) {
+    val rotation = if (name == "loading") {
+        val transition = rememberInfiniteTransition(label = "loadingIcon")
+        val angle by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
+            label = "loadingIconRotation",
+        )
+        angle
+    } else 0f
     val vector = remember(name) {
         val path = when (name) {
             "phone" -> "M7,2 L17,2 Q19,2 19,4 L19,20 Q19,22 17,22 L7,22 Q5,22 5,20 L5,4 Q5,2 7,2 Z M12,18 L12.01,18"
@@ -305,7 +329,7 @@ fun PairingIcon(name: String, color: Color, modifier: Modifier) {
         ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f)
             .addPath(PathParser().parsePathString(path).toNodes(), stroke = SolidColor(Color.White), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round, strokeLineJoin = StrokeJoin.Round).build()
     }
-    Image(vector, contentDescription = null, modifier = modifier, colorFilter = ColorFilter.tint(color))
+    Image(vector, contentDescription = null, modifier = modifier.graphicsLayer { rotationZ = rotation }, colorFilter = ColorFilter.tint(color))
 }
 
 @Composable
@@ -314,7 +338,10 @@ fun ManualSetupScreen(busy: Boolean, message: String?, onConnect: (AccountInput)
     var server by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val accountFocus = remember { FocusRequester() }
     val serverFocus = remember { FocusRequester() }
+    val usernameFocus = remember { FocusRequester() }
+    val passwordFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { serverFocus.requestFocus() }
     val validServer = server.startsWith("http://") || server.startsWith("https://")
     val canSubmit = accountName.isNotBlank() && validServer && username.isNotBlank() && password.isNotBlank() && !busy
@@ -368,7 +395,7 @@ fun ManualSetupScreen(busy: Boolean, message: String?, onConnect: (AccountInput)
                             Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(PairingInset), contentAlignment = Alignment.Center) {
                                 PairingIcon("move", Bright, Modifier.size(16.dp))
                             }
-                            Text("Use the remote to move between fields", color = Quiet, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Back closes the keyboard; arrows move between fields", color = Quiet, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Column(
@@ -378,14 +405,14 @@ fun ManualSetupScreen(busy: Boolean, message: String?, onConnect: (AccountInput)
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Text("Provider credentials", color = Bright, fontSize = 27.sp, fontWeight = FontWeight.Bold)
-                            Text("Use the remote to select a field and open the on-screen keyboard.", color = Quiet, fontSize = 13.sp)
+                            Text("Select a field to type. Use Next to continue.", color = Quiet, fontSize = 13.sp)
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ManualField(accountName, { accountName = it }, "ACCOUNT NAME", "Living Room TV", "tv", Modifier.width(788.dp), enabled = !busy)
-                            ManualField(server, { server = it }, "SERVER URL", "https://line.provider.tv:8080", "link", Modifier.width(788.dp), enabled = !busy, error = server.isNotBlank() && !validServer, focusRequester = serverFocus)
+                            ManualField(accountName, { accountName = it }, "ACCOUNT NAME", "Living Room TV", "tv", Modifier.width(788.dp), enabled = !busy, focusRequester = accountFocus, nextFocusRequester = serverFocus)
+                            ManualField(server, { server = it }, "SERVER URL", "https://line.provider.tv:8080", "link", Modifier.width(788.dp), enabled = !busy, error = server.isNotBlank() && !validServer, focusRequester = serverFocus, nextFocusRequester = usernameFocus)
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                ManualField(username, { username = it }, "USERNAME", "Provider username", "user", Modifier.width(388.dp), enabled = !busy)
-                                ManualField(password, { password = it }, "PASSWORD", "Provider password", "lock", Modifier.width(388.dp), password = true, enabled = !busy)
+                                ManualField(username, { username = it }, "USERNAME", "Provider username", "user", Modifier.width(388.dp), enabled = !busy, focusRequester = usernameFocus, nextFocusRequester = passwordFocus)
+                                ManualField(password, { password = it }, "PASSWORD", "Provider password", "lock", Modifier.width(388.dp), password = true, enabled = !busy, focusRequester = passwordFocus)
                             }
                         }
                         message?.let { Text(it, color = Coral, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -441,14 +468,35 @@ private fun ManualField(
     enabled: Boolean = true,
     error: Boolean = false,
     focusRequester: FocusRequester? = null,
+    nextFocusRequester: FocusRequester? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val inputFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) fieldValue = fieldValue.copy(text = value, selection = TextRange(value.length))
+    }
+    LaunchedEffect(editing) { if (editing) inputFocus.requestFocus() }
     val shape = RoundedCornerShape(12.dp)
     val strokeColor = when { error -> Coral; focused -> Peach; else -> PairingStroke }
     Row(
         modifier.height(76.dp).alpha(if (enabled) 1f else 0.55f).clip(shape)
             .background(if (enabled) PairingInset else Color(0xFF111620))
-            .border(if (focused && !error) 2.dp else 1.dp, strokeColor, shape).padding(horizontal = 18.dp),
+            .border(if (focused && !error) 2.dp else 1.dp, strokeColor, shape)
+            .onFocusChanged {
+                focused = it.hasFocus
+                if (!it.hasFocus) editing = false
+            }
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { editing = true }
+            .padding(horizontal = 18.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -456,30 +504,46 @@ private fun ManualField(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(label, color = if (error) Coral else if (focused) Peach else Quiet, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                enabled = enabled,
+                value = fieldValue,
+                onValueChange = {
+                    fieldValue = it
+                    if (it.text != value) onValueChange(it.text)
+                },
+                enabled = enabled && editing,
                 singleLine = true,
                 textStyle = androidx.compose.ui.text.TextStyle(color = if (enabled) Bright else Quiet, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                 cursorBrush = SolidColor(Peach),
                 visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(imeAction = if (nextFocusRequester == null) ImeAction.Done else ImeAction.Next),
+                keyboardActions = KeyboardActions(
+                    onNext = {
+                        editing = false
+                        nextFocusRequester?.requestFocus()
+                        keyboard?.hide()
+                    },
+                    onDone = {
+                        editing = false
+                        (nextFocusRequester ?: focusRequester)?.requestFocus()
+                        keyboard?.hide()
+                    },
+                ),
                 decorationBox = { input ->
                     Box(contentAlignment = Alignment.CenterStart) {
-                        if (value.isBlank()) {
+                        if (fieldValue.text.isBlank()) {
                             Text(placeholder, color = Quiet, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         }
                         // Compose the editable inner field even when the placeholder is visible.
                         input()
                     }
                 },
-                modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }
-                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                modifier = Modifier.fillMaxWidth().tvTextFieldNavigation(focusManager, fieldValue)
+                    .focusRequester(inputFocus),
             )
         }
         if (error) {
             PairingIcon("alert", Coral, Modifier.size(18.dp))
         } else if (focused) Box(Modifier.height(24.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xFF2A2119)).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-            Text("OK", color = Peach, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+            Text(if (editing) if (nextFocusRequester == null) "DONE" else "NEXT" else "OK", color = Peach, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
         }
     }
 }

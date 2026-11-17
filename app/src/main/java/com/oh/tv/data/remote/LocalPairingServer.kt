@@ -1,6 +1,7 @@
 package com.oh.tv.data.remote
 
 import android.content.Context
+import com.oh.tv.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -132,6 +133,7 @@ class LocalPairingServer(context: Context) {
             ?: return respond(output, 400, "application/json", "{\"error\":\"incomplete_body\"}".toByteArray())
         when {
             method == "GET" && path == "/" -> asset(output, "pairing/index.html", "text/html; charset=utf-8")
+            method == "GET" && path == "/brand.png" -> resource(output, R.drawable.pairing_brand, "image/png")
             method == "GET" && path == "/link.css" -> asset(output, "pairing/link.css", "text/css; charset=utf-8")
             method == "GET" && path == "/link.js" -> asset(output, "pairing/link.js", "text/javascript; charset=utf-8")
             method == "GET" && path == "/session" -> sessionInfo(output, query["code"].orEmpty())
@@ -171,6 +173,11 @@ class LocalPairingServer(context: Context) {
 
     private fun asset(output: BufferedOutputStream, name: String, contentType: String) {
         val bytes = appContext.assets.open(name).use { it.readBytes() }
+        respond(output, 200, contentType, bytes)
+    }
+
+    private fun resource(output: BufferedOutputStream, id: Int, contentType: String) {
+        val bytes = appContext.resources.openRawResource(id).use { it.readBytes() }
         respond(output, 200, contentType, bytes)
     }
 

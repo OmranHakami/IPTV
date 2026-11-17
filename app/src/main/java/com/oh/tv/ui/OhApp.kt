@@ -42,9 +42,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -180,15 +183,24 @@ fun OhApp(viewModel: OhViewModel) {
 
 @Composable
 private fun OhTextField(value: String, onChange: (String) -> Unit, label: String, password: Boolean = false) {
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(value) {
+        if (value != fieldValue.text) fieldValue = fieldValue.copy(text = value, selection = TextRange(value.length))
+    }
     BasicTextField(
-        value = value,
-        onValueChange = onChange,
+        value = fieldValue,
+        onValueChange = {
+            fieldValue = it
+            if (it.text != value) onChange(it.text)
+        },
         singleLine = true,
         textStyle = androidx.compose.ui.text.TextStyle(color = WarmWhite, fontSize = 14.sp),
         cursorBrush = SolidColor(FocusBlue),
         visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        decorationBox = { input -> if (value.isBlank()) Text(label, color = Muted, fontSize = 14.sp) else input() },
-        modifier = Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)).background(Surface).padding(horizontal = 11.dp, vertical = 9.dp),
+        decorationBox = { input -> if (fieldValue.text.isBlank()) Text(label, color = Muted, fontSize = 14.sp) else input() },
+        modifier = Modifier.fillMaxWidth().tvTextFieldNavigation(focusManager, fieldValue)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(9.dp)).background(Surface).padding(horizontal = 11.dp, vertical = 9.dp),
     )
 }
 

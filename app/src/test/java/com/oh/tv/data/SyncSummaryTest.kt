@@ -22,6 +22,6 @@ class SyncSummaryTest {
     }
 
     @Test fun exposesExactlyThreeUserFacingScopes() {
-        assertTrue(SyncScopes.userVisible == listOf("Live TV", "Movies", "TV Shows"))
+        assertTrue(SyncScopes.userVisible == listOf("Movies", "TV Shows", "Live TV"))
     }
 }

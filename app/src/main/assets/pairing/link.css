@@ -3,7 +3,7 @@
 body { margin:0; min-height:100vh; display:grid; place-items:center; padding:22px; background:radial-gradient(circle at 90% 0,#ff9d6624,transparent 35%),radial-gradient(circle at 0 100%,#5b7cff22,transparent 35%),#070a10 }
 main { width:min(100%,480px) }
 header { display:flex; align-items:center; gap:12px; margin-bottom:22px }
-.mark { width:42px; height:42px; display:grid; place-items:center; color:#17100c; border-radius:13px; background:linear-gradient(135deg,#ffb86b,#ff7b72) }
+.mark { width:42px; height:42px; display:block; border-radius:13px }
 .brand { letter-spacing:3px; font-weight:800 }
 .card { padding:26px; border:1px solid #2c3649; border-radius:24px; background:linear-gradient(145deg,#151c2a,#111621); box-shadow:0 24px 70px #0008 }
 h1 { margin:0 0 8px; font-size:30px }

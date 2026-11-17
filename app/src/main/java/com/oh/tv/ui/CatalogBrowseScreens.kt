@@ -64,8 +64,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -341,15 +344,26 @@ private fun SearchNavigation(
 @Composable
 private fun SearchInput(query: String, onQuery: (String) -> Unit, firstResultFocus: FocusRequester?) {
     var focused by remember { mutableStateOf(false) }
+    var fieldValue by remember { mutableStateOf(TextFieldValue(query, TextRange(query.length))) }
     val requester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     LaunchedEffect(Unit) { requester.requestFocus() }
+    LaunchedEffect(query) {
+        if (query != fieldValue.text) fieldValue = fieldValue.copy(text = query, selection = TextRange(query.length))
+    }
     BasicTextField(
-        value = query, onValueChange = onQuery, singleLine = true,
+        value = fieldValue,
+        onValueChange = {
+            fieldValue = it
+            if (it.text != query) onQuery(it.text)
+        },
+        singleLine = true,
         textStyle = androidx.compose.ui.text.TextStyle(color = CatalogBright, fontSize = 12.sp, fontWeight = FontWeight.Bold),
         cursorBrush = SolidColor(CatalogBlue),
         modifier = Modifier.width(250.dp).height(40.dp).focusRequester(requester)
             .focusProperties { if (firstResultFocus != null) down = firstResultFocus }
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged { focused = it.isFocused }
+            .tvTextFieldNavigation(focusManager, fieldValue),
         decorationBox = { field ->
             Row(
                 Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(if (focused) Color(0xFF202839) else CatalogSurface)
@@ -358,10 +372,10 @@ private fun SearchInput(query: String, onQuery: (String) -> Unit, firstResultFoc
             ) {
                 PairingIcon("search", if (focused) CatalogBright else CatalogQuiet, Modifier.size(18.dp))
                 Box(Modifier.weight(1f)) {
-                    if (query.isBlank()) Text("Search movies and shows", color = CatalogQuiet, fontSize = 11.sp)
+                    if (fieldValue.text.isBlank()) Text("Search movies and shows", color = CatalogQuiet, fontSize = 11.sp)
                     field()
                 }
-                if (query.isNotBlank()) Text("×", color = CatalogQuiet, fontSize = 16.sp, modifier = Modifier.clickable { onQuery("") })
+                if (fieldValue.text.isNotBlank()) Text("×", color = CatalogQuiet, fontSize = 16.sp, modifier = Modifier.clickable { onQuery("") })
             }
         },
     )
