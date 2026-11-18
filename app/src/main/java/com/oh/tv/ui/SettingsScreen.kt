@@ -251,7 +251,13 @@ private fun AccountSettings(state: OhUiState, onRemove: () -> Unit) {
                 Text("Remove account", color = Color(0xFFE8EDF7), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Text("Deletes this account and its local data from this TV.", color = SettingsQuiet, fontSize = 11.sp)
             }
-            SettingsButton("Remove account", "alert", danger = true, onClick = onRemove)
+            SettingsButton(
+                "Remove account",
+                "alert",
+                modifier = Modifier.testTag("remove-account-button"),
+                danger = true,
+                onClick = onRemove,
+            )
         }
     }
 }

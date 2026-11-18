@@ -87,7 +87,6 @@ import kotlinx.coroutines.delay
 import java.text.NumberFormat
 import java.util.Locale
 
-private val Ink = Color(0xFF090B10)
 private val Panel = Color(0xFF151C2A)
 private val PanelDeep = Color(0xFF0B1019)
 private val Stroke = Color(0xFF2C3649)
@@ -97,15 +96,6 @@ private val Peach = Color(0xFFFFB86B)
 private val Coral = Color(0xFFFF7B72)
 private val ChoiceBlue = Color(0xFF5B7CFF)
 private val Success = Color(0xFF71E5B1)
-
-@Composable
-private fun DesignedScreen(content: @Composable () -> Unit) {
-    val horizontalPadding = 42.dp
-    val verticalPadding = 24.dp
-    Box(Modifier.fillMaxSize().background(Ink)) {
-        Box(Modifier.fillMaxSize().padding(horizontal = horizontalPadding, vertical = verticalPadding)) { content() }
-    }
-}
 
 @Composable
 private fun DesignTopBar(step: String? = null, onBack: (() -> Unit)? = null, onSettings: (() -> Unit)? = null) {

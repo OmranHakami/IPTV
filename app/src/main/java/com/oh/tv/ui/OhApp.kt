@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -77,8 +75,6 @@ import com.oh.tv.data.local.MovieEntity
 import com.oh.tv.data.local.SeriesEntity
 import com.oh.tv.data.local.SeriesEpisodeEntity
 import com.oh.tv.data.local.PlaybackProgressEntity
-import com.oh.tv.data.SyncScopes
-import com.oh.tv.data.SyncState
 import com.oh.tv.ui.components.FocusSurface
 import com.oh.tv.ui.components.MetadataLine
 import com.oh.tv.ui.components.OhButton
@@ -101,7 +97,6 @@ fun OhApp(viewModel: OhViewModel) {
     val channels = viewModel.liveChannels.collectAsLazyPagingItems()
     val episodes by viewModel.episodes.collectAsStateWithLifecycle()
     val seriesProgress by viewModel.seriesProgress.collectAsStateWithLifecycle()
-    val continueMovies by viewModel.continueMovies.collectAsStateWithLifecycle()
     val catalogCounts by viewModel.catalogCounts.collectAsStateWithLifecycle()
 
     BackHandler(enabled = state.destination !in setOf(Destination.Loading, Destination.PhonePairing, Destination.Hub)) {
@@ -145,17 +140,6 @@ fun OhApp(viewModel: OhViewModel) {
             message = state.message,
             busy = state.busy,
         )
-        Destination.OnDemand -> OnDemandScreen(
-            onMovies = { viewModel.navigate(Destination.Movies) },
-            onShows = { viewModel.navigate(Destination.TvShows) },
-            onHome = { viewModel.navigate(Destination.Hub) },
-            onSettings = { viewModel.openSettings(Destination.OnDemand) },
-            onSearch = { viewModel.navigate(Destination.Search) },
-            onMyList = { viewModel.navigate(Destination.MyList) },
-            continueMovies = continueMovies,
-            onMovie = viewModel::openMovie,
-            onMovieVisible = viewModel::loadMovieMetadata,
-        )
         Destination.Movies -> DesignedMovieCatalogScreen(viewModel, viewModel::openMovie)
         Destination.TvShows -> DesignedSeriesCatalogScreen(viewModel, viewModel::openSeries)
         Destination.MovieDetails -> state.selectedMovie?.let { MovieDetailsScreen(it, state.favorite, state.message, viewModel::playMovie, viewModel::toggleFavorite) { viewModel.navigate(Destination.Movies) } }
@@ -167,79 +151,6 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.Settings -> SettingsScreen(state, catalogCounts, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
         Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
-    }
-}
-
-@Composable
-private fun SyncScreen(state: OhUiState, retry: () -> Unit) {
-    Screen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Preparing OH", color = WarmWhite, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(11.dp))
-            Column(Modifier.width(430.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                SyncScopes.userVisible.forEach { scope ->
-                    val progress = state.syncProgress.firstOrNull { it.scope == scope }
-                    Column(Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).background(Surface).padding(11.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(scope, color = WarmWhite)
-                            Text(
-                                when (progress?.state) {
-                                    SyncState.Running -> "Syncing • ${progress.processed}"
-                                    SyncState.Ready -> "Ready • ${progress.processed}"
-                                    SyncState.Empty -> "Empty"
-                                    SyncState.Stale -> "Cached • ${progress.processed}"
-                                    SyncState.Failed -> "Failed"
-                                    else -> "Waiting"
-                                },
-                                color = when (progress?.state) {
-                                    SyncState.Failed -> ErrorRed
-                                    SyncState.Ready, SyncState.Stale -> FocusBlue
-                                    else -> Muted
-                                },
-                            )
-                        }
-                        progress?.failure?.let { Text(it, color = ErrorRed, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
-                    }
-                }
-                if (state.message != null) {
-                    Text(state.message, color = ErrorRed)
-                    OhButton("Try again", retry, primary = true)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HubScreen(onLive: () -> Unit, onDemand: () -> Unit, onSettings: () -> Unit) {
-    val initialFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { initialFocus.requestFocus() }
-    Screen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OhTopBar(onSettings = onSettings)
-            Text("What would you like to watch?", color = WarmWhite, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
-            Text("Use ◀  ▶ to choose, then press OK", color = FocusBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                HubCard("Live TV", "Channels, guide and what’s on now", "▦  ⚽  ◇", onLive, Modifier.weight(1f), initialFocus)
-                HubCard("Movies & TV Shows", "Your library, favorites and continue watching", "◉  ✦  ▷", onDemand, Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun HubCard(title: String, subtitle: String, symbols: String, click: () -> Unit, modifier: Modifier, focusRequester: FocusRequester? = null) {
-    FocusSurface(click, modifier.fillMaxHeight(0.66f), Surface, Color(0xFF2A3446), focusRequester = focusRequester) {
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().weight(1f).background(Color(0xFF27364F)), contentAlignment = Alignment.Center) {
-                Text(symbols, color = WarmWhite, fontSize = 28.sp)
-            }
-            Column(Modifier.padding(17.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(title, color = WarmWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = Muted, fontSize = 11.sp)
-                Text("Press OK to open", color = FocusBlue, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
     }
 }
 
@@ -295,73 +206,6 @@ private fun LiveTvScreen(
             Column(Modifier.weight(1f)) {
                 Text(channel.name, color = WarmWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 MetadataLine("Live")
-            }
-        }
-    }
-}
-
-@Composable
-private fun OnDemandScreen(
-    onMovies: () -> Unit, onShows: () -> Unit, onHome: () -> Unit, onSettings: () -> Unit,
-    onSearch: () -> Unit, onMyList: () -> Unit, continueMovies: List<MovieEntity>, onMovie: (MovieEntity) -> Unit,
-    onMovieVisible: (MovieEntity) -> Unit,
-) {
-    Screen {
-        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            OhTopBar("Movies & TV Shows", onHome, onSettings)
-            Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
-                OhButton("Movies", onMovies, primary = true)
-                OhButton("TV Shows", onShows)
-                OhButton("Search", onSearch)
-                OhButton("Watchlist", onMyList)
-            }
-            Text("Continue Watching", color = WarmWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            if (continueMovies.isEmpty()) EmptyShelf("Your unfinished movies will appear here")
-            else LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(continueMovies, key = { it.providerId }) { movie ->
-                    LaunchedEffect(movie.accountId, movie.providerId, movie.metadataUpdatedAt) { onMovieVisible(movie) }
-                    MovieShelfCard(movie) { onMovie(movie) }
-                }
-            }
-            Text("Recently Added", color = WarmWhite, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            EmptyShelf("Open Movies or TV Shows to browse the complete local catalog")
-        }
-    }
-}
-
-@Composable private fun EmptyShelf(message: String) {
-    Box(Modifier.fillMaxWidth().height(96.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(Surface), contentAlignment = Alignment.Center) {
-        Text(message, color = Muted)
-    }
-}
-
-@Composable private fun MovieShelfCard(movie: MovieEntity, click: () -> Unit) {
-    FocusSurface(click, Modifier.width(120.dp).height(88.dp), Surface, SurfaceLifted) {
-        Box(Modifier.fillMaxSize()) {
-            AsyncImage(movie.providerIconUrl, movie.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Text(movie.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(8.dp))
-        }
-    }
-}
-
-@Composable private fun MovieCard(movie: MovieEntity, click: () -> Unit) {
-    FocusSurface(click, Modifier.aspectRatio(0.68f), Surface, SurfaceLifted) {
-        Box(Modifier.fillMaxSize()) {
-            AsyncImage(movie.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: movie.providerIconUrl, movie.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(10.dp)) {
-                Text(movie.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
-            }
-        }
-    }
-}
-
-@Composable private fun SeriesCard(show: SeriesEntity, click: () -> Unit) {
-    FocusSurface(click, Modifier.aspectRatio(0.68f), Surface, SurfaceLifted) {
-        Box(Modifier.fillMaxSize()) {
-            AsyncImage(show.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: show.providerIconUrl, show.displayName, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Box(Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(Color(0xD917191D)).padding(10.dp)) {
-                Text(show.displayName, color = WarmWhite, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
             }
         }
     }

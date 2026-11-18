@@ -7,7 +7,7 @@ object NavigationPolicy {
         Destination.MovieDetails -> Destination.Movies
         Destination.SeriesDetails -> Destination.TvShows
         Destination.Search, Destination.MyList -> browseReturn
-        Destination.Movies, Destination.TvShows, Destination.LiveTv, Destination.OnDemand -> Destination.Hub
+        Destination.Movies, Destination.TvShows, Destination.LiveTv -> Destination.Hub
         Destination.ManualSetup -> Destination.PhonePairing
         else -> Destination.Hub
     }

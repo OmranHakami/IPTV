@@ -23,7 +23,7 @@ class SettingsScreenTest {
         composeRule.onNodeWithTag("settings-subtitles").performClick()
         composeRule.onNodeWithText("OPENSUBTITLES API KEY").assertIsDisplayed()
         composeRule.onNodeWithTag("settings-account").performClick()
-        composeRule.onNodeWithText("Remove account").performClick()
+        composeRule.onNodeWithTag("remove-account-button").performClick()
         composeRule.onNodeWithTag("remove-account-confirmation").assertIsDisplayed()
     }
 }

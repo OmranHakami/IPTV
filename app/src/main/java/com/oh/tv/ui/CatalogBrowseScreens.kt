@@ -99,6 +99,8 @@ private val CatalogQuiet = Color(0xFF98A3B7)
 private val CatalogPeach = Color(0xFFFFB86B)
 private val CatalogBlue = Color(0xFF7C9CFF)
 
+private enum class MediaSection { Home, Movies, Shows, MyList }
+
 private data class CatalogItem(
     val id: String,
     val categoryId: String?,

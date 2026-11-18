@@ -58,12 +58,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")
-    implementation("androidx.navigation:navigation-compose:2.9.8")
 
     implementation("androidx.compose.ui:ui:1.11.0")
     implementation("androidx.compose.ui:ui-tooling-preview:1.11.0")
     implementation("androidx.compose.foundation:foundation:1.11.0")
-    implementation("androidx.tv:tv-foundation:1.0.0")
     implementation("androidx.tv:tv-material:1.1.0")
 
     implementation("androidx.room:room-runtime:2.8.3")
@@ -71,12 +69,10 @@ dependencies {
     implementation("androidx.room:room-paging:2.8.3")
     kapt("androidx.room:room-compiler:2.8.3")
     implementation("androidx.paging:paging-compose:3.4.2")
-    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     implementation("androidx.media3:media3-exoplayer:1.10.0")
     implementation("androidx.media3:media3-exoplayer-hls:1.10.0")
     implementation("androidx.media3:media3-ui:1.10.0")
-    implementation("androidx.media3:media3-session:1.10.0")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.2")

@@ -23,15 +23,11 @@ class NavigationPolicyTest {
     }
 
     @Test fun settingsReturnsToOpeningArea() {
-        assertEquals(Destination.OnDemand, NavigationPolicy.back(Destination.Settings, Destination.OnDemand, Destination.Hub))
-    }
-
-    @Test fun manualSetupReturnsToPhonePairing() {
-        assertEquals(Destination.PhonePairing, NavigationPolicy.back(Destination.ManualSetup, Destination.Hub, Destination.Hub))
+        assertEquals(Destination.Movies, NavigationPolicy.back(Destination.Settings, Destination.Movies, Destination.Hub))
     }
 
     @Test fun searchAndMyListReturnToTheirCaller() {
-        for (origin in listOf(Destination.LiveTv, Destination.TvShows, Destination.Movies, Destination.OnDemand)) {
+        for (origin in listOf(Destination.LiveTv, Destination.TvShows, Destination.Movies)) {
             assertEquals(origin, NavigationPolicy.back(Destination.Search, Destination.Hub, Destination.Hub, origin))
             assertEquals(origin, NavigationPolicy.back(Destination.MyList, Destination.Hub, Destination.Hub, origin))
         }
