@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -88,6 +89,8 @@ import com.oh.tv.data.local.SeriesEntity
 import com.oh.tv.data.local.SeriesEpisodeEntity
 import com.oh.tv.data.local.VodCategoryEntity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import java.util.Locale
 
 private val CatalogBackground = Color(0xFF090B10)
@@ -115,9 +118,10 @@ internal data class CatalogItem(
     val tmdbId: Long? = null,
     val trailerType: String = "movie",
     val saved: Boolean,
-    val onVisible: () -> Unit,
+    val onVisible: () -> Unit = {},
     val onToggleSaved: () -> Unit,
     val onOpen: () -> Unit,
+    val onHeld: (suspend () -> Long?)? = null,
 )
 
 @Composable
@@ -140,9 +144,8 @@ fun DesignedMovieCatalogScreen(viewModel: OhViewModel, select: (MovieEntity) -> 
             rating = movie.tmdbRating ?: movie.providerRating,
             overview = movie.displayOverview,
             metadataKey = movie.metadataUpdatedAt,
-            tmdbId = movie.tmdbId,
             saved = movie.providerId in favoriteIds,
-            onVisible = { viewModel.loadMovieMetadata(movie) },
+            onHeld = { viewModel.loadMovieMetadata(movie).resolvedTmdbId },
             onToggleSaved = { viewModel.toggleFavorite(movie) },
             onOpen = { select(movie) },
         )
@@ -237,8 +240,8 @@ fun DesignedSearchScreen(viewModel: OhViewModel) {
                 genre = movie.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "MOVIE",
                 year = movie.displayReleaseDate?.take(4).orEmpty(), runtime = movie.runtimeMinutes?.let(::formatRuntime),
                 rating = movie.tmdbRating ?: movie.providerRating, overview = movie.displayOverview,
-                metadataKey = movie.metadataUpdatedAt, tmdbId = movie.tmdbId, saved = movie.providerId in movieFavoriteIds,
-                onVisible = { viewModel.loadMovieMetadata(movie) }, onToggleSaved = { viewModel.toggleFavorite(movie) },
+                metadataKey = movie.metadataUpdatedAt, saved = movie.providerId in movieFavoriteIds,
+                onHeld = { viewModel.loadMovieMetadata(movie).resolvedTmdbId }, onToggleSaved = { viewModel.toggleFavorite(movie) },
                 onOpen = { viewModel.openMovie(movie) },
             ),
             SearchResultType.Movies,
@@ -289,8 +292,8 @@ fun DesignedWatchlistScreen(viewModel: OhViewModel) {
                 genre = movie.genres?.substringBefore(',')?.trim()?.takeIf { it.isNotBlank() } ?: "MOVIE",
                 year = movie.displayReleaseDate?.take(4).orEmpty(), runtime = movie.runtimeMinutes?.let(::formatRuntime),
                 rating = movie.tmdbRating ?: movie.providerRating, overview = movie.displayOverview,
-                metadataKey = movie.metadataUpdatedAt, tmdbId = movie.tmdbId, saved = true,
-                onVisible = { viewModel.loadMovieMetadata(movie) }, onToggleSaved = { viewModel.toggleFavorite(movie) },
+                metadataKey = movie.metadataUpdatedAt, saved = true,
+                onHeld = { viewModel.loadMovieMetadata(movie).resolvedTmdbId }, onToggleSaved = { viewModel.toggleFavorite(movie) },
                 onOpen = { viewModel.openMovie(movie) },
             ),
             SearchResultType.Movies,
@@ -360,7 +363,7 @@ fun DesignedWatchlistScreen(viewModel: OhViewModel) {
                                 metadata = listOfNotNull("MOVIE", continueMovie.displayReleaseDate?.take(4)).joinToString("  •  "),
                                 progress = continueProgress,
                                 focusRequester = initialFocus,
-                                onVisible = { viewModel.loadMovieMetadata(continueMovie) },
+                                onHeld = { viewModel.loadMovieMetadata(continueMovie) },
                                 onResume = { viewModel.resumeMovie(continueMovie) },
                             )
                             continueEpisode != null -> WatchlistContinueCard(
@@ -399,7 +402,7 @@ private fun WatchlistContinueCard(
     metadata: String,
     progress: PlaybackProgressEntity,
     focusRequester: FocusRequester,
-    onVisible: () -> Unit = {},
+    onHeld: (suspend () -> Unit)? = null,
     onResume: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -407,7 +410,13 @@ private fun WatchlistContinueCard(
     val borderWidth by animateDpAsState(if (focused) 3.dp else 1.dp, tween(160), label = "continue border width")
     val scale by animateFloatAsState(if (focused) 1.02f else 1f, tween(160), label = "continue scale")
     val fraction = (progress.positionMs.toFloat() / progress.durationMs.coerceAtLeast(1)).coerceIn(0f, 1f)
-    LaunchedEffect(title, artworkUrl) { onVisible() }
+    val lookup by rememberUpdatedState(onHeld)
+    LaunchedEffect(focused, progress.contentType, progress.contentId) {
+        if (focused && lookup != null) {
+            delay(MoviePreviewHoldMs)
+            lookup?.invoke()
+        }
+    }
     Row(
         Modifier.width(438.dp).height(172.dp).graphicsLayer { scaleX = scale; scaleY = scale }
             .shadow(if (focused) 12.dp else 0.dp, RoundedCornerShape(16.dp), clip = false)
@@ -443,7 +452,7 @@ private fun WatchlistContinueCard(
 @Composable
 private fun WatchlistSavedCard(item: CatalogItem, focusRequester: FocusRequester?) {
     var focused by remember { mutableStateOf(false) }
-    LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
+    CatalogCardMetadata(item, focused)
     Box(
         Modifier.width(224.dp).height(340.dp)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -681,13 +690,27 @@ private fun SearchResults(
 @Composable
 private fun SearchResultCard(entry: SearchEntry, selected: Boolean, requester: FocusRequester?, onFocused: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    LaunchedEffect(entry.item.id, entry.item.metadataKey) { entry.item.onVisible() }
+    CatalogCardMetadata(entry.item, focused)
     Box(
         Modifier.width(224.dp).height(340.dp).zIndex(if (focused) 2f else 0f)
             .then(if (requester != null) Modifier.focusRequester(requester) else Modifier)
             .onFocusChanged { focused = it.isFocused; if (it.isFocused) onFocused() }.clickable(onClick = entry.item.onOpen),
     ) { CatalogCompactCard(entry.item, focused || selected) }
 }
+
+@Composable
+private fun CatalogCardMetadata(item: CatalogItem, focused: Boolean) {
+    val lookup by rememberUpdatedState(item.onHeld)
+    LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
+    LaunchedEffect(item.id, focused) {
+        if (focused && lookup != null) {
+            delay(MoviePreviewHoldMs)
+            lookup?.invoke()
+        }
+    }
+}
+
+private const val MoviePreviewHoldMs = 5_000L
 
 @Composable
 private fun SearchFocusedPreview(entry: SearchEntry, onQuery: (String) -> Unit) {
@@ -990,6 +1013,7 @@ internal fun CatalogMovieCard(
 ) {
     var focused by remember { mutableStateOf(false) }
     var trailerKey by remember(item.id, item.tmdbId) { mutableStateOf<String?>(null) }
+    val lookup by rememberUpdatedState(item.onHeld)
     val gateway = remember { TmdbTrailerGateway(BuildConfig.TMDB_API_KEY) }
     val bringIntoView = remember { BringIntoViewRequester() }
     val width by animateDpAsState(if (focused) 420.dp else 224.dp, tween(180), label = "catalog card width")
@@ -1007,10 +1031,11 @@ internal fun CatalogMovieCard(
         onPreviewChanged(false)
         if (focused) {
             // No network request or playback until focus remains uninterrupted for 5 seconds.
-            delay(5000)
-            val id = item.tmdbId
+            delay(MoviePreviewHoldMs)
+            val id = lookup?.invoke() ?: item.tmdbId
             if (id != null) {
                 val key = gateway.trailerKey(item.trailerType, id)
+                coroutineContext.ensureActive()
                 if (key != null) {
                     trailerKey = key
                     onPreviewChanged(true)

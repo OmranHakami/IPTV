@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -35,13 +34,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -302,12 +299,16 @@ private fun SubtitleSettings(
     onSave: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val keyFocus = remember { FocusRequester() }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         SettingsPanelHeader("Subtitles", "Connect OpenSubtitles for downloaded subtitle tracks.", if (configured) "CONFIGURED" else "NOT CONFIGURED", configured)
         Divider()
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("OPENSUBTITLES API KEY", color = SettingsQuiet, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-            SecureKeyField(key, onKeyChange)
+            ManualField(
+                key, onKeyChange, "OPENSUBTITLES API KEY", "Enter a new API key", "lock",
+                modifier = Modifier.fillMaxWidth().testTag("settings-api-key"),
+                password = true, focusRequester = keyFocus,
+            )
             Text("Saving a new key replaces the currently configured key.", color = SettingsQuiet, fontSize = 11.sp)
             SettingsButton("Save API key", "check", primary = true, modifier = Modifier.fillMaxWidth(), onClick = onSave)
             status?.let { Text(it, color = if (it.startsWith("Could") || it.startsWith("Enter")) SettingsDanger else SettingsSuccess, fontSize = 11.sp) }
@@ -388,32 +389,6 @@ private fun SecurityNote(text: String) {
         PairingIcon("lock", Color(0xFF62CBB1), Modifier.size(17.dp))
         Text(text, color = Color(0xFF9ED9CC), fontSize = 12.sp)
     }
-}
-
-@Composable
-private fun SecureKeyField(value: String, onValueChange: (String) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = androidx.compose.ui.text.TextStyle(color = Color(0xFFE8EDF7), fontSize = 13.sp),
-        visualTransformation = PasswordVisualTransformation(),
-        cursorBrush = SolidColor(SettingsBlue),
-        modifier = Modifier.fillMaxWidth().height(56.dp).onFocusChanged { focused = it.isFocused }
-            .clip(RoundedCornerShape(12.dp)).background(SettingsSurface)
-            .border(if (focused) 2.dp else 1.dp, if (focused) Color.White else Color(0xFF35415A), RoundedCornerShape(12.dp))
-            .padding(horizontal = 16.dp),
-        decorationBox = { input ->
-            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PairingIcon("lock", Color(0xFF91A7FF), Modifier.size(18.dp))
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Text("Enter a new API key", color = SettingsQuiet, fontSize = 13.sp)
-                    input()
-                }
-            }
-        },
-    )
 }
 
 @Composable

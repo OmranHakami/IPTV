@@ -72,8 +72,9 @@ data class CatalogCounts(val liveChannels: Int = 0, val movies: Int = 0, val ser
 
 val BrowseMovieGenres = listOf("Action", "Comedy", "Drama", "Documentary", "Science Fiction")
 
-internal fun shouldApplyMovieMetadata(current: MovieEntity, requestedTmdbId: Long): Boolean =
-    current.metadataUpdatedAt == null && current.tmdbId == requestedTmdbId
+internal fun MovieEntity.hasSameMatchInputs(other: MovieEntity): Boolean =
+    accountId == other.accountId && providerId == other.providerId &&
+        tmdbId == other.tmdbId && name == other.name && releaseDate == other.releaseDate
 
 class OhRepository(
     private val database: OhDatabase,
@@ -294,14 +295,29 @@ class OhRepository(
         } ?: 0L
 
     suspend fun enrichMovie(item: MovieEntity): MovieEntity {
-        if (item.metadataUpdatedAt != null) return item
-        val id = item.tmdbId ?: return item
-        val metadata = tmdb.movie(id).getOrNull() ?: return item
+        val dao = database.catalogDao()
+        val ids = listOf(item.providerId)
+        val source = dao.moviesByIds(item.accountId, ids).firstOrNull()
+            ?: return item.copy(resolvedTmdbId = null, resolvedImdbId = null)
+        if (!tmdb.enabled || source.resolvedTmdbId != null ||
+            (source.tmdbRetryAfter ?: 0L) > System.currentTimeMillis()
+        ) return source
+
+        var retryDelay = 30 * 60_000L
+        val metadata = try {
+            tmdb.matchMovie(source.tmdbId, source.name, source.releaseDate?.take(4)?.toIntOrNull())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            retryDelay = 60_000L
+            null
+        }
         return database.withTransaction {
-            val current = database.catalogDao().moviesByIds(item.accountId, listOf(item.providerId))
-                .firstOrNull() ?: return@withTransaction item
-            if (!shouldApplyMovieMetadata(current, id)) return@withTransaction current
-            val updated = current.copy(
+            val current = dao.moviesByIds(item.accountId, ids).firstOrNull()
+                ?: return@withTransaction source.copy(resolvedTmdbId = null, resolvedImdbId = null)
+            if (!current.hasSameMatchInputs(source) || current.resolvedTmdbId != null) return@withTransaction current
+            val now = System.currentTimeMillis()
+            val updated = if (metadata == null) current.copy(tmdbRetryAfter = now + retryDelay) else current.copy(
                 tmdbTitle = metadata.title.takeIf { it.isNotBlank() } ?: current.tmdbTitle,
                 tmdbOverview = metadata.overview ?: current.tmdbOverview,
                 tmdbReleaseDate = metadata.releaseDate ?: current.tmdbReleaseDate,
@@ -311,9 +327,12 @@ class OhRepository(
                 genres = metadata.genres ?: current.genres,
                 posterPath = metadata.posterPath ?: current.posterPath,
                 backdropPath = metadata.backdropPath ?: current.backdropPath,
-                metadataUpdatedAt = System.currentTimeMillis(),
+                metadataUpdatedAt = now,
+                resolvedTmdbId = metadata.id,
+                resolvedImdbId = metadata.imdbId,
+                tmdbRetryAfter = null,
             )
-            database.catalogDao().upsertMovies(listOf(updated))
+            dao.upsertMovies(listOf(updated))
             updated
         }
     }
@@ -413,7 +432,8 @@ class OhRepository(
                     categoryId = raw["category_id"].asString(),
                     tmdbId = raw["tmdb_id"].asLong(),
                     overview = null,
-                    releaseDate = null,
+                    releaseDate = raw["release_date"].asString() ?: raw["releaseDate"].asString()
+                        ?: raw["year"].asString(),
                     runtimeMinutes = null,
                     tmdbRating = null,
                     tmdbVoteCount = null,
@@ -427,7 +447,7 @@ class OhRepository(
             val existing = if (mapped.isEmpty()) emptyMap<String, MovieEntity>() else database.catalogDao()
                 .moviesByIds(account.id, mapped.map { it.providerId }).associateBy { it.providerId }
             val merged = mapped.map { fresh ->
-                existing[fresh.providerId]?.let { old ->
+                existing[fresh.providerId]?.takeIf { it.hasSameMatchInputs(fresh) }?.let { old ->
                     fresh.copy(
                         tmdbTitle = old.tmdbTitle,
                         tmdbOverview = old.tmdbOverview,
@@ -441,6 +461,9 @@ class OhRepository(
                         posterPath = old.posterPath,
                         backdropPath = old.backdropPath,
                         metadataUpdatedAt = old.metadataUpdatedAt,
+                        resolvedTmdbId = old.resolvedTmdbId,
+                        resolvedImdbId = old.resolvedImdbId,
+                        tmdbRetryAfter = old.tmdbRetryAfter,
                     )
                 } ?: fresh
             }

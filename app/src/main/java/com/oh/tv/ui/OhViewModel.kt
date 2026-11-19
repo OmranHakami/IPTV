@@ -35,6 +35,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
+import com.oh.tv.data.hasSameMatchInputs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -93,6 +97,7 @@ class OhViewModel(
     private var seriesDetailsJob: Job? = null
     private var syncJob: Job? = null
     private val metadataRequests = mutableSetOf<String>()
+    private val movieMetadataRequests = mutableMapOf<List<Any?>, Deferred<MovieEntity>>()
     private val metadataSemaphore = Semaphore(4)
     private var pairingJob: Job? = null
 
@@ -336,27 +341,39 @@ class OhViewModel(
     }
 
     fun openMovie(movie: MovieEntity) {
-        mutableState.value = mutableState.value.copy(selectedMovie = movie, selectedSeries = null, selectedEpisode = null, destination = Destination.MovieDetails, favorite = false)
+        mutableState.value = mutableState.value.copy(selectedMovie = movie, selectedSeries = null, selectedEpisode = null, destination = Destination.MovieDetails, favorite = false, message = null)
+        viewModelScope.launch { loadMovieMetadata(movie) }
         viewModelScope.launch {
             val account = mutableState.value.account
             val favorite = account?.let { repository.databaseFavorite(it.id, "movie", movie.providerId) } ?: false
-            mutableState.value = mutableState.value.copy(favorite = favorite)
+            mutableState.update { state ->
+                if (state.selectedMovie?.hasSameMatchInputs(movie) == true) state.copy(favorite = favorite) else state
+            }
         }
     }
 
-    fun loadMovieMetadata(movie: MovieEntity) {
-        if (movie.tmdbId == null || movie.metadataUpdatedAt != null) return
-        val requestKey = "movie:${movie.accountId}:${movie.providerId}"
-        if (!metadataRequests.add(requestKey)) return
-        viewModelScope.launch {
-            try {
-                val enriched = metadataSemaphore.withPermit { repository.enrichMovie(movie) }
-                if (mutableState.value.selectedMovie?.providerId == enriched.providerId) {
-                    mutableState.value = mutableState.value.copy(selectedMovie = enriched)
+    suspend fun loadMovieMetadata(movie: MovieEntity): MovieEntity {
+        val requestKey = listOf(movie.accountId, movie.providerId, movie.tmdbId, movie.name, movie.releaseDate)
+        return movieMetadataRequests.getOrPut(requestKey) {
+            viewModelScope.async(start = CoroutineStart.LAZY) {
+                try {
+                    val enriched = metadataSemaphore.withPermit { repository.enrichMovie(movie) }
+                    mutableState.update { state ->
+                        state.copy(
+                            selectedMovie = if (state.selectedMovie?.hasSameMatchInputs(movie) == true) enriched else state.selectedMovie,
+                            searchMovies = state.searchMovies.map { if (it.hasSameMatchInputs(movie)) enriched else it },
+                        )
+                    }
+                    enriched
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    movie
+                } finally {
+                    movieMetadataRequests.remove(requestKey)
                 }
             }
-            finally { metadataRequests.remove(requestKey) }
-        }
+        }.await()
     }
 
     fun loadSeriesMetadata(series: SeriesEntity) {

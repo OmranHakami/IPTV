@@ -31,6 +31,7 @@ class CatalogMovieCardTest {
 
     @Test fun focusExpandsTheMeasuredItemAndRevealsItAtTheRowEdge() {
         val outside = FocusRequester()
+        val lookups = mutableListOf<Int>()
         compose.setContent {
             val inputMode = LocalInputModeManager.current
             CompositionLocalProvider(LocalDensity provides Density(0.5f)) {
@@ -42,6 +43,7 @@ class CatalogMovieCardTest {
                                 id = "$index", title = "Movie $index", categoryId = null, artworkUrl = null,
                                 genre = "Movie", year = "", runtime = null, rating = null, overview = null,
                                 metadataKey = null, saved = false, onVisible = {}, onToggleSaved = {}, onOpen = {},
+                                onHeld = { lookups += index; null },
                             )
                             CatalogMovieCard(item, focusRequester = null, dimmed = false, onPreviewChanged = {})
                         }
@@ -76,7 +78,12 @@ class CatalogMovieCardTest {
         assertEquals(nextLeft + expanded.width - compact.width, second.fetchSemanticsNode().boundsInRoot.left, 0f)
 
         val last = compose.onNodeWithText("Movie 2")
+        compose.runOnIdle { assertTrue(lookups.isEmpty()) }
         last.performSemanticsAction(SemanticsActions.RequestFocus)
+        compose.mainClock.advanceTimeBy(4900)
+        compose.runOnIdle { assertTrue(lookups.isEmpty()) }
+        compose.mainClock.advanceTimeBy(300)
+        compose.runOnIdle { assertEquals(listOf(2), lookups) }
         compose.mainClock.autoAdvance = true
         assertEquals(210f, last.fetchSemanticsNode().boundsInRoot.width, 0f)
     }

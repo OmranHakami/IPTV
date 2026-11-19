@@ -68,6 +68,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -468,7 +469,7 @@ private fun ManualRequirement(label: String) {
 }
 
 @Composable
-private fun ManualField(
+internal fun ManualField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
@@ -527,7 +528,10 @@ private fun ManualField(
                 textStyle = androidx.compose.ui.text.TextStyle(color = if (enabled) Bright else Quiet, fontFamily = Manrope, fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
                 cursorBrush = SolidColor(Peach),
                 visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(imeAction = if (nextFocusRequester == null) ImeAction.Done else ImeAction.Next),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (password) KeyboardType.Password else KeyboardType.Text,
+                    imeAction = if (nextFocusRequester == null) ImeAction.Done else ImeAction.Next,
+                ),
                 keyboardActions = KeyboardActions(
                     onNext = {
                         editing = false

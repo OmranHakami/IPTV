@@ -94,6 +94,9 @@ data class MovieEntity(
     val tmdbOverview: String? = null,
     val tmdbReleaseDate: String? = null,
     val syncGeneration: Long,
+    val resolvedTmdbId: Long? = null,
+    val resolvedImdbId: String? = null,
+    val tmdbRetryAfter: Long? = null,
 ) {
     val displayName: String get() = tmdbTitle?.takeIf { it.isNotBlank() } ?: name
     val displayOverview: String? get() = tmdbOverview?.takeIf { it.isNotBlank() } ?: overview

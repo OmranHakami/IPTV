@@ -25,6 +25,7 @@ data class TmdbMetadata(
     val genres: String?,
     val posterPath: String?,
     val backdropPath: String?,
+    val imdbId: String? = null,
 )
 
 sealed interface ProviderFailure {

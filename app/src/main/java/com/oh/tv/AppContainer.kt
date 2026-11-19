@@ -7,6 +7,8 @@ import com.oh.tv.data.OhRepository
 import com.oh.tv.data.local.OhDatabase
 import com.oh.tv.data.local.MIGRATION_2_3
 import com.oh.tv.data.local.MIGRATION_3_4
+import com.oh.tv.data.local.MIGRATION_4_5
+import com.oh.tv.data.local.MIGRATION_5_6
 import com.oh.tv.data.remote.PlaybackUrlFactory
 import com.oh.tv.data.remote.LocalPairingServer
 import com.oh.tv.data.remote.TmdbGateway
@@ -16,7 +18,7 @@ import com.oh.tv.security.CredentialVault
 class AppContainer(context: Context) {
     val database: OhDatabase = Room.databaseBuilder(context, OhDatabase::class.java, "oh.db")
         .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-        .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+        .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
         .fallbackToDestructiveMigration()
         .fallbackToDestructiveMigrationOnDowngrade()
         .build()

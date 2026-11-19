@@ -1,5 +1,6 @@
 package com.oh.tv.data.remote
 
+import android.util.AtomicFile
 import com.squareup.moshi.JsonReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,6 +12,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 import java.io.InputStream
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 /** OpenSubtitles.com API; callers must supply their own API key. */
 class OpenSubtitlesGateway(
@@ -24,12 +26,7 @@ class OpenSubtitlesGateway(
         val url = "https://api.opensubtitles.com/api/v1/subtitles".toHttpUrl().newBuilder()
             .addQueryParameter("languages", languages.joinToString(","))
             .apply {
-                if (!movie.imdbId.isNullOrBlank()) addQueryParameter("imdb_id", movie.imdbId.removePrefix("tt"))
-                else if (movie.tmdbId != null) addQueryParameter("tmdb_id", movie.tmdbId.toString())
-                else {
-                    addQueryParameter("query", movie.title)
-                    movie.year?.let { addQueryParameter("year", it.toString()) }
-                }
+                movie.searchParameters().forEach { (name, value) -> addQueryParameter(name, value) }
             }.build()
         val request = Request.Builder().url(url).header("Api-Key", apiKey)
             .header("User-Agent", "OH-IPTV/0.3.1").header("Accept", "application/json").build()
@@ -46,7 +43,27 @@ class OpenSubtitlesGateway(
         }
     }
 
-    /** Download URL is short-lived; consume immediately rather than storing it. */
+    suspend fun cachedDownload(directory: File, fileId: String): File = withContext(Dispatchers.IO) {
+        val id = requireNotNull(fileId.toLongOrNull())
+        val file = File(directory, "$id.srt")
+        if (file.length() > 0L) return@withContext file
+
+        val bytes = download(id.toString())
+        check(bytes.isNotEmpty()) { "Empty subtitle file" }
+        directory.mkdirs()
+        val atomic = AtomicFile(file)
+        val output = atomic.startWrite()
+        try {
+            output.write(bytes)
+            atomic.finishWrite(output)
+        } catch (error: Exception) {
+            atomic.failWrite(output)
+            throw error
+        }
+        file
+    }
+
+    /** Download URL is short-lived. Consume it immediately. */
     suspend fun download(fileId: String): ByteArray = withContext(Dispatchers.IO) {
         check(enabled) { "OpenSubtitles API key is not configured" }
         val json = """{"file_id":${fileId.toLongOrNull() ?: error("Invalid subtitle file ID")}}"""

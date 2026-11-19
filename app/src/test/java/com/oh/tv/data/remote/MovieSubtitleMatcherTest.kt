@@ -23,7 +23,10 @@ class MovieSubtitleMatcherTest {
             },
         )
         assertEquals(1, matcher.find(SubtitleMovie("Example", 2024), listOf("ar")).size)
+        assertEquals(1, matcher.find(SubtitleMovie("Example", 2024), listOf("ar")).size)
         assertEquals(1, searches)
+        matcher.find(SubtitleMovie("Example", 2024), listOf("en"))
+        assertEquals(2, searches)
         assertEquals(0, metadataCalls)
     }
 
@@ -41,12 +44,13 @@ class MovieSubtitleMatcherTest {
             },
         )
         assertEquals("subtitle-2", matcher.find(SubtitleMovie("Example"), listOf("en")).single().id)
+        assertEquals("subtitle-2", matcher.find(SubtitleMovie("Example", imdbId = "tt1234567"), listOf("en")).single().id)
         assertEquals(listOf(null, "tt1234567"), searched.map { it.imdbId })
     }
 
     @Test fun unresolvedOrUnchangedIdentityDoesNotRepeatSearch() = runBlocking {
         var searches = 0
-        val movie = SubtitleMovie("Example", 2024)
+        val movie = SubtitleMovie("Example", 2024, tmdbId = 42)
         val matcher = MovieSubtitleMatcher(
             object : SubtitleLookup {
                 override suspend fun search(movie: SubtitleMovie, languages: List<String>): List<SubtitleMatch> {
@@ -55,7 +59,7 @@ class MovieSubtitleMatcherTest {
                 }
             },
             object : MovieIdentityLookup {
-                override suspend fun resolve(movie: SubtitleMovie) = movie
+                override suspend fun resolve(movie: SubtitleMovie) = movie.copy(title = "Localized title")
             },
         )
         assertEquals(emptyList<SubtitleMatch>(), matcher.find(movie, listOf("ar")))

@@ -17,13 +17,36 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FavoriteEntity::class,
         PlaybackProgressEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = true,
 )
 abstract class OhDatabase : RoomDatabase() {
     abstract fun accountDao(): AccountDao
     abstract fun catalogDao(): CatalogDao
     abstract fun personalDao(): PersonalDao
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE movies ADD COLUMN resolvedTmdbId INTEGER")
+        db.execSQL("ALTER TABLE movies ADD COLUMN resolvedImdbId TEXT")
+        db.execSQL("ALTER TABLE movies ADD COLUMN tmdbRetryAfter INTEGER")
+        db.execSQL("UPDATE movies SET resolvedTmdbId = tmdbId WHERE metadataUpdatedAt IS NOT NULL AND tmdbId > 0")
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // v5 backfilled provider IDs without validating the cached TMDB fields.
+        db.execSQL("""
+            UPDATE movies SET resolvedTmdbId = NULL, resolvedImdbId = NULL, tmdbRetryAfter = NULL,
+                metadataUpdatedAt = NULL, tmdbTitle = NULL, tmdbOverview = NULL, tmdbReleaseDate = NULL,
+                runtimeMinutes = NULL, tmdbRating = NULL, tmdbVoteCount = NULL, genres = NULL,
+                posterPath = NULL, backdropPath = NULL
+            WHERE metadataUpdatedAt IS NOT NULL AND
+                (resolvedTmdbId IS NULL OR (resolvedTmdbId = tmdbId AND resolvedImdbId IS NULL))
+        """.trimIndent())
+    }
 }
 
 /** Preserve existing catalogs and accounts when adding provider VOD category metadata. */

@@ -15,19 +15,20 @@ class MovieEnrichmentFreshnessTest {
         metadataUpdatedAt = metadataUpdatedAt, syncGeneration = 200L,
     )
 
-    @Test fun acceptsMetadataForCurrentUnenrichedMovie() {
-        assertTrue(shouldApplyMovieMetadata(movie(), 42L))
+    @Test fun cacheFieldsDoNotChangeProviderIdentity() {
+        assertTrue(movie(metadataUpdatedAt = 100L).hasSameMatchInputs(movie()))
     }
 
     @Test fun rejectsMetadataForMovieWhoseTmdbIdChangedDuringRefresh() {
-        assertFalse(shouldApplyMovieMetadata(movie(tmdbId = 43L), 42L))
+        assertFalse(movie(tmdbId = 43L).hasSameMatchInputs(movie()))
     }
 
-    @Test fun rejectsLateMetadataWhenCurrentRowAlreadyEnriched() {
-        assertFalse(shouldApplyMovieMetadata(movie(metadataUpdatedAt = 100L), 42L))
+    @Test fun rejectsLateMetadataWhenTitleOrYearChanges() {
+        assertFalse(movie().copy(name = "Other movie").hasSameMatchInputs(movie()))
+        assertFalse(movie().copy(releaseDate = "2024").hasSameMatchInputs(movie()))
     }
 
     @Test fun rejectsMetadataWhenProviderRemovedTmdbId() {
-        assertFalse(shouldApplyMovieMetadata(movie(tmdbId = null), 42L))
+        assertFalse(movie(tmdbId = null).hasSameMatchInputs(movie()))
     }
 }

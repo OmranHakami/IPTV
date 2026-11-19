@@ -46,15 +46,12 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import com.oh.tv.security.SubtitleCredentialStore
-import com.oh.tv.BuildConfig
 import com.oh.tv.data.remote.MovieSubtitleMatcher
 import com.oh.tv.data.remote.SubtitleMovie
 import com.oh.tv.data.remote.OpenSubtitlesGateway
-import com.oh.tv.data.remote.TmdbGateway
+import com.oh.tv.data.remote.movieSearchTerms
 import com.oh.tv.data.remote.MovieIdentityLookup
 import com.oh.tv.data.remote.SubtitleMatch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import android.net.Uri
@@ -155,7 +152,14 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.Search -> DesignedSearchScreen(viewModel)
         Destination.MyList -> DesignedWatchlistScreen(viewModel)
         Destination.Settings -> SettingsScreen(state, catalogCounts, viewModel::closeSettings, viewModel::sync, viewModel::removeAccount)
-        Destination.Player -> state.playbackUrl?.let { PlayerScreen(it, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress, if (state.playbackType == PlaybackType.Movie) state.selectedMovie?.let { movie -> SubtitleMovie(movie.displayName, movie.displayReleaseDate?.take(4)?.toIntOrNull(), tmdbId = movie.tmdbId) } else null) }
+        Destination.Player -> state.playbackUrl?.let { url ->
+            val movie = state.selectedMovie.takeIf { state.playbackType == PlaybackType.Movie }
+            PlayerScreen(url, state.playbackTitle.orEmpty(), state.playbackStartMs, viewModel::savePlaybackProgress,
+                subtitleMovie = movie?.subtitleIdentity(),
+                resolveSubtitleMovie = { if (movie == null) null else viewModel.loadMovieMetadata(movie)
+                    .takeIf { it.resolvedTmdbId != null }?.subtitleIdentity() },
+            )
+        }
             ?: Screen { StatusPanel("Playback unavailable", "The stream URL could not be resolved.") }
     }
 }
@@ -392,15 +396,23 @@ private fun remainingLabel(progress: PlaybackProgressEntity): String {
     return if (minutes > 0) "${minutes}m left" else "Resume"
 }
 
+private fun MovieEntity.subtitleIdentity(): SubtitleMovie {
+    val (title, year) = movieSearchTerms(name, releaseDate?.take(4)?.toIntOrNull())
+    return SubtitleMovie(title, year, resolvedImdbId, resolvedTmdbId ?: tmdbId?.takeIf { it > 0 })
+}
+
 @Composable
-private fun PlayerScreen(url: String, title: String, startPositionMs: Long, saveProgress: (Long, Long) -> Unit, subtitleMovie: SubtitleMovie? = null) {
+private fun PlayerScreen(
+    url: String, title: String, startPositionMs: Long, saveProgress: (Long, Long) -> Unit,
+    subtitleMovie: SubtitleMovie?, resolveSubtitleMovie: suspend () -> SubtitleMovie?,
+) {
     val context = LocalContext.current
     var error by remember(url) { mutableStateOf<String?>(null) }
     var buffering by remember(url) { mutableStateOf(true) }
     val subtitleApi = remember(context) { OpenSubtitlesGateway(SubtitleCredentialStore(context).load().orEmpty()) }
-    val tmdbApi = remember { TmdbGateway(BuildConfig.TMDB_API_KEY) }
-    val matcher = remember { MovieSubtitleMatcher(subtitleApi, object : MovieIdentityLookup {
-        override suspend fun resolve(movie: SubtitleMovie) = tmdbApi.resolveSubtitleMovie(movie)
+    val resolveIdentity by androidx.compose.runtime.rememberUpdatedState(resolveSubtitleMovie)
+    val matcher = remember(subtitleApi) { MovieSubtitleMatcher(subtitleApi, object : MovieIdentityLookup {
+        override suspend fun resolve(movie: SubtitleMovie) = resolveIdentity()
     }) }
     val coroutineScope = rememberCoroutineScope()
     var subtitleResults by remember(url) { mutableStateOf<List<SubtitleMatch>>(emptyList()) }
@@ -446,13 +458,16 @@ private fun PlayerScreen(url: String, title: String, startPositionMs: Long, save
                 if (showSubtitleSearch) {
                     Column(Modifier.background(Surface).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OhButton(if (subtitleBusy) "Searching…" else "Search Arabic / English", {
-                            if (!subtitleBusy) coroutineScope.launch {
+                            if (!subtitleApi.enabled) {
+                                subtitleMessage = "Set an OpenSubtitles API key in Settings"
+                            } else if (!subtitleBusy) coroutineScope.launch {
                                 subtitleBusy = true
                                 subtitleMessage = null
                                 try {
                                     subtitleResults = matcher.find(subtitleMovie, listOf("ar", "en"))
                                     if (subtitleResults.isEmpty()) subtitleMessage = "No subtitles found"
-                                } catch (_: Exception) { subtitleMessage = "Subtitle search failed" }
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                                catch (_: Exception) { subtitleMessage = "Subtitle search failed" }
                                 finally { subtitleBusy = false }
                             }
                         })
@@ -461,11 +476,7 @@ private fun PlayerScreen(url: String, title: String, startPositionMs: Long, save
                                 if (!subtitleBusy) coroutineScope.launch {
                                     subtitleBusy = true
                                     try {
-                                        val bytes = subtitleApi.download(subtitle.id)
-                                        val file = withContext(Dispatchers.IO) {
-                                            val dir = File(context.cacheDir, "subtitles").apply { mkdirs() }
-                                            File(dir, "${subtitle.id}.srt").apply { writeBytes(bytes) }
-                                        }
+                                        val file = subtitleApi.cachedDownload(File(context.cacheDir, "subtitles"), subtitle.id)
                                         val position = exoPlayer.currentPosition
                                         val media = MediaItem.Builder().setUri(url)
                                             .setSubtitleConfigurations(listOf(
@@ -479,7 +490,8 @@ private fun PlayerScreen(url: String, title: String, startPositionMs: Long, save
                                         exoPlayer.prepare()
                                         exoPlayer.play()
                                         showSubtitleSearch = false
-                                    } catch (_: Exception) { subtitleMessage = "Subtitle download failed" }
+                                    } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                                    catch (_: Exception) { subtitleMessage = "Subtitle download failed" }
                                     finally { subtitleBusy = false }
                                 }
                             })

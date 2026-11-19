@@ -42,6 +42,7 @@ import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(AndroidJUnit4::class)
 class CatalogSyncTest {
@@ -62,14 +63,54 @@ class CatalogSyncTest {
         db.close()
     }
 
-    private fun repository(reply: (String) -> String): OhRepository {
+    private fun repository(tmdb: TmdbGateway = TmdbGateway(""), reply: (String) -> String): OhRepository {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
             val json = reply(requireNotNull(request.url.queryParameter("action")))
             Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
                 .code(200).message("OK").body(json.toResponseBody()).build()
         }.build()
-        return OhRepository(db, vault, XtreamGateway(client), TmdbGateway(""))
+        return OhRepository(db, vault, XtreamGateway(client), tmdb)
+    }
+
+    @Test fun movieDetailsAndHeldFocusShareTheLookupAndCacheTheResult() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val duplicate = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val requests = AtomicInteger()
+        val tmdb = TmdbGateway("test", OkHttpClient.Builder().addInterceptor { chain ->
+            if (requests.incrementAndGet() > 1) duplicate.complete(Unit)
+            started.complete(Unit)
+            check(release.await(10, TimeUnit.SECONDS))
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body("""{"id":42,"title":"Matched","imdb_id":"tt123"}""".toResponseBody()).build()
+        }.build())
+        val repository = repository(tmdb) { action ->
+            if (action == "get_vod_streams") """[{"stream_id":"m","name":"Provider","tmdb_id":42}]""" else "[]"
+        }
+        repository.syncAll(account) {}
+        val movie = db.catalogDao().moviesByIds(account.id, listOf("m")).single()
+        val store = ViewModelStore()
+        try {
+            val model = withContext(Dispatchers.Main) {
+                val pairing = LocalPairingServer(ApplicationProvider.getApplicationContext())
+                ViewModelProvider(store, OhViewModel.Factory(repository, pairing))[OhViewModel::class.java]
+            }
+            val heldFocus = async(Dispatchers.Main) { model.loadMovieMetadata(movie) }
+            withTimeout(5_000) { started.await() }
+            withContext(Dispatchers.Main) { model.openMovie(movie) }
+            assertNull(withTimeoutOrNull(250) { duplicate.await() })
+            release.countDown()
+            assertEquals(42L, heldFocus.await().resolvedTmdbId)
+            assertEquals("tt123", model.state.value.selectedMovie?.resolvedImdbId)
+            val cached = repository.enrichMovie(movie)
+            assertEquals("Provider", cached.name)
+            assertEquals("Matched", cached.displayName)
+            assertEquals(1, requests.get())
+        } finally {
+            release.countDown()
+            withContext(Dispatchers.Main) { store.clear() }
+        }
     }
 
     @Test fun failedOrCancelledBatchRestoresAllContentAndCategories() = runBlocking {
