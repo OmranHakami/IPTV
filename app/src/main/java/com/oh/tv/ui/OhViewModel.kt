@@ -62,6 +62,8 @@ data class OhUiState(
     val selectedCategoryId: String? = null,
     val selectedMovie: MovieEntity? = null,
     val selectedSeries: SeriesEntity? = null,
+    val seriesDetailsLoading: Boolean = false,
+    val seriesDetailsError: String? = null,
     val selectedEpisode: SeriesEpisodeEntity? = null,
     val playbackUrl: String? = null,
     val playbackType: PlaybackType? = null,
@@ -88,6 +90,8 @@ class OhViewModel(
     private val mutableState = MutableStateFlow(OhUiState())
     val state: StateFlow<OhUiState> = mutableState
     private var searchJob: Job? = null
+    private var seriesDetailsJob: Job? = null
+    private var syncJob: Job? = null
     private val metadataRequests = mutableSetOf<String>()
     private val metadataSemaphore = Semaphore(4)
     private var pairingJob: Job? = null
@@ -259,23 +263,33 @@ class OhViewModel(
     }
 
     fun sync(account: AccountEntity? = mutableState.value.account) {
+        if (syncJob?.isActive == true) return
         if (account == null) {
             startPhonePairing()
             return
         }
-        mutableState.value = mutableState.value.copy(destination = Destination.Sync, busy = true, message = null, syncProgress = emptyList())
-        viewModelScope.launch {
-            val summary = repository.syncAll(account) { update ->
-                mutableState.update { current ->
-                    current.copy(syncProgress = current.syncProgress.filterNot { it.scope == update.scope } + update)
+        syncJob = viewModelScope.launch {
+            mutableState.update { it.copy(destination = Destination.Sync, busy = true, message = null, syncProgress = emptyList()) }
+            val failure = "The initial synchronization failed. Your account is saved; try again."
+            try {
+                val summary = repository.syncAll(account) { update ->
+                    mutableState.update { current ->
+                        current.copy(syncProgress = current.syncProgress.filterNot { it.scope == update.scope } + update)
+                    }
                 }
+                mutableState.update { current ->
+                    current.copy(
+                        destination = if (summary.usable) current.destination else Destination.Sync,
+                        message = if (summary.usable) null else failure,
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableState.update { it.copy(message = failure) }
+            } finally {
+                mutableState.update { it.copy(busy = false) }
             }
-            val currentDestination = mutableState.value.destination
-            mutableState.value = mutableState.value.copy(
-                destination = if (summary.usable && currentDestination != Destination.Sync) currentDestination else Destination.Sync,
-                busy = false,
-                message = if (summary.usable) null else "The initial synchronization failed. Your account is saved; try again.",
-            )
         }
     }
 
@@ -384,17 +398,36 @@ class OhViewModel(
     }
 
     fun openSeries(series: SeriesEntity) {
-        val account = mutableState.value.account ?: return
-        mutableState.value = mutableState.value.copy(selectedMovie = null, selectedSeries = series, selectedEpisode = null, destination = Destination.SeriesDetails, busy = true, message = null, favorite = false)
-        viewModelScope.launch {
-            runCatching { repository.loadSeriesDetails(account, series) }
-                .onSuccess { updated ->
-                    mutableState.value = mutableState.value.copy(
-                        selectedSeries = updated, busy = false,
-                        favorite = repository.databaseFavorite(account.id, "series", series.providerId),
-                    )
-                }
-                .onFailure { mutableState.value = mutableState.value.copy(busy = false, message = "Episodes could not be loaded. Try again.") }
+        val previous = mutableState.value
+        val account = previous.account ?: return
+        if (series.accountId != account.id) return
+        fun matchesSeries(state: OhUiState) = state.account?.id == account.id && state.selectedSeries?.accountId == account.id &&
+            state.selectedSeries.providerId == series.providerId
+        val retry = previous.destination == Destination.SeriesDetails && matchesSeries(previous)
+        if (retry && seriesDetailsJob?.isActive == true) return
+        seriesDetailsJob?.cancel()
+        mutableState.value = if (retry) previous.copy(seriesDetailsLoading = true) else previous.copy(
+            selectedMovie = null, selectedSeries = series, selectedEpisode = null, destination = Destination.SeriesDetails,
+            seriesDetailsLoading = true, message = null, seriesDetailsError = null, favorite = false,
+        )
+        seriesDetailsJob = viewModelScope.launch {
+            val details = runCatching {
+                val updated = repository.loadSeriesDetails(account, series)
+                updated to repository.databaseFavorite(account.id, "series", series.providerId)
+            }
+            mutableState.update { current ->
+                val playingSeries = current.destination == Destination.Player && current.playerReturn == Destination.SeriesDetails
+                if (!matchesSeries(current) || (current.destination != Destination.SeriesDetails && !playingSeries)) return@update current
+                details.fold(
+                    onSuccess = { (updated, favorite) ->
+                        current.copy(selectedSeries = updated, favorite = favorite, seriesDetailsLoading = false, seriesDetailsError = null)
+                    },
+                    onFailure = { error ->
+                        if (error is CancellationException) throw error
+                        current.copy(seriesDetailsLoading = false, seriesDetailsError = "Episodes could not be loaded. Try again.")
+                    },
+                )
+            }
         }
     }
 

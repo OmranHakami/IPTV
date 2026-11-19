@@ -2,6 +2,7 @@ package com.oh.tv
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import com.oh.tv.data.OhRepository
 import com.oh.tv.data.local.OhDatabase
 import com.oh.tv.data.local.MIGRATION_2_3
@@ -14,6 +15,7 @@ import com.oh.tv.security.CredentialVault
 
 class AppContainer(context: Context) {
     val database: OhDatabase = Room.databaseBuilder(context, OhDatabase::class.java, "oh.db")
+        .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
         .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
         .fallbackToDestructiveMigration()
         .fallbackToDestructiveMigrationOnDowngrade()

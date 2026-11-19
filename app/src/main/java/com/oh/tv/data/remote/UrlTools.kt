@@ -6,9 +6,17 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 object UrlNormalizer {
     fun normalize(raw: String): String {
         val value = raw.trim().trimEnd('/')
-        val withScheme = if (value.startsWith("http://") || value.startsWith("https://")) value else "https://$value"
+        val withScheme = if (value.startsWith("http://", ignoreCase = true) || value.startsWith("https://", ignoreCase = true)) {
+            value
+        } else {
+            "https://$value"
+        }
         val url = withScheme.toHttpUrlOrNull() ?: throw IllegalArgumentException("Enter a valid server URL")
-        require(url.host.isNotBlank()) { "Enter a valid server URL" }
+        // OkHttp discards empty user-info and accepts extra slashes before the authority.
+        val authority = withScheme.substringAfter("://").trimStart('/', '\\').takeWhile { it !in "/\\?#" }
+        require(url.host.isNotBlank() && '@' !in authority) {
+            "Enter a valid server URL"
+        }
         val segments = url.pathSegments.filter { it.isNotBlank() }.toMutableList()
         if (segments.lastOrNull().equals("player_api.php", ignoreCase = true)) segments.removeAt(segments.lastIndex)
         val builder = url.newBuilder().encodedPath("/").query(null).fragment(null)

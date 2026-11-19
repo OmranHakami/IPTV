@@ -30,14 +30,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,7 +59,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -101,7 +101,7 @@ private val CatalogBlue = Color(0xFF7C9CFF)
 
 private enum class MediaSection { Home, Movies, Shows, MyList }
 
-private data class CatalogItem(
+internal data class CatalogItem(
     val id: String,
     val categoryId: String?,
     val title: String,
@@ -962,7 +962,7 @@ private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEn
                     contentPadding = PaddingValues(vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    itemsIndexed(rowItems, key = { _, item -> item.id }) { index, item ->
+                    items(rowItems, key = { it.id }) { item ->
                         CatalogMovieCard(
                             item = item,
                             focusRequester = if (item.id == items.first().id) firstFocus else null,
@@ -982,7 +982,7 @@ private fun CatalogRows(items: List<CatalogItem>, categories: List<VodCategoryEn
 }
 
 @Composable
-private fun CatalogMovieCard(
+internal fun CatalogMovieCard(
     item: CatalogItem,
     focusRequester: FocusRequester?,
     dimmed: Boolean,
@@ -991,9 +991,17 @@ private fun CatalogMovieCard(
     var focused by remember { mutableStateOf(false) }
     var trailerKey by remember(item.id, item.tmdbId) { mutableStateOf<String?>(null) }
     val gateway = remember { TmdbTrailerGateway(BuildConfig.TMDB_API_KEY) }
-    val expansion by animateFloatAsState(if (focused) 1f else 224f / 420f, tween(100), label = "movie card expansion")
+    val bringIntoView = remember { BringIntoViewRequester() }
+    val width by animateDpAsState(if (focused) 420.dp else 224.dp, tween(180), label = "catalog card width")
+    val expanded = focused && width == 420.dp
     val surroundingAlpha by animateFloatAsState(if (dimmed) 0.5f else 1f, tween(160), label = "surrounding card alpha")
     LaunchedEffect(item.id, item.metadataKey) { item.onVisible() }
+    LaunchedEffect(expanded) {
+        if (expanded) {
+            withFrameNanos { } // Let the row measure the expanded card before scrolling.
+            bringIntoView.bringIntoView()
+        }
+    }
     LaunchedEffect(focused, item.tmdbId, item.id) {
         trailerKey = null
         onPreviewChanged(false)
@@ -1011,8 +1019,8 @@ private fun CatalogMovieCard(
         }
     }
     Box(
-        Modifier.width(224.dp).height(340.dp)
-            .zIndex(if (focused) 2f else 0f)
+        Modifier.width(width).height(340.dp)
+            .bringIntoViewRequester(bringIntoView)
             .graphicsLayer { alpha = surroundingAlpha }
             .onFocusChanged { focused = it.isFocused }
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -1021,15 +1029,7 @@ private fun CatalogMovieCard(
         if (focused) {
             CatalogDelayedPreview(
                 item,
-                Modifier
-                    .wrapContentSize(Alignment.CenterStart, unbounded = true)
-                    .requiredWidth(420.dp)
-                    .height(340.dp)
-                    .shadow(12.dp, RoundedCornerShape(17.dp), clip = false)
-                    .graphicsLayer {
-                        scaleX = expansion
-                        transformOrigin = TransformOrigin(0f, 0.5f)
-                    },
+                Modifier.fillMaxSize().shadow(12.dp, RoundedCornerShape(17.dp), clip = false),
                 trailerKey,
             )
         } else CatalogCompactCard(item, false)
@@ -1040,7 +1040,7 @@ private fun CatalogMovieCard(
 private fun CatalogCompactCard(item: CatalogItem, focused: Boolean, savedBadge: Boolean = false) {
     val shape = RoundedCornerShape(14.dp)
     val borderWidth by animateDpAsState(if (focused) 2.dp else 1.dp, tween(160), label = "card border")
-    val borderColor by animateColorAsState(if (focused) CatalogBlue else CatalogStroke, tween(160), label = "card border color")
+    val borderColor by animateColorAsState(if (focused) CatalogPeach else CatalogStroke, tween(160), label = "card border color")
     Box(
         Modifier.fillMaxSize().clip(shape).background(CatalogSurface).border(borderWidth, borderColor, shape)
     ) {
@@ -1067,7 +1067,7 @@ private fun CatalogSavedBadge(modifier: Modifier) {
 @Composable
 private fun CatalogDelayedPreview(item: CatalogItem, modifier: Modifier, trailerKey: String?) {
     val shape = RoundedCornerShape(17.dp)
-    Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogBlue, shape)) {
+    Box(modifier.clip(shape).background(CatalogSurface).border(2.dp, CatalogPeach, shape)) {
         CatalogArtwork(item, Modifier.fillMaxWidth().height(218.dp))
         if (trailerKey != null) {
             // Dispose WebView immediately on focus loss to stop playback and release resources.

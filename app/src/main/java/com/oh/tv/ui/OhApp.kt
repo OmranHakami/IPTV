@@ -144,7 +144,13 @@ fun OhApp(viewModel: OhViewModel) {
         Destination.TvShows -> DesignedSeriesCatalogScreen(viewModel, viewModel::openSeries)
         Destination.MovieDetails -> state.selectedMovie?.let { MovieDetailsScreen(it, state.favorite, state.message, viewModel::playMovie, viewModel::toggleFavorite) { viewModel.navigate(Destination.Movies) } }
             ?: StatusPanel("Movie unavailable", "The selected movie is no longer in the local catalog.")
-        Destination.SeriesDetails -> state.selectedSeries?.let { SeriesDetailsScreen(it, episodes, seriesProgress, state, viewModel::playEpisode, viewModel::toggleFavorite) { viewModel.navigate(Destination.TvShows) } }
+        Destination.SeriesDetails -> state.selectedSeries?.let { series ->
+            SeriesDetailsScreen(
+                series, episodes.filter { it.seriesId == series.providerId && it.accountId == series.accountId },
+                seriesProgress, state, viewModel::playEpisode, viewModel::toggleFavorite,
+                retry = { viewModel.openSeries(series) }, back = { viewModel.navigate(Destination.TvShows) },
+            )
+        }
             ?: Screen { StatusPanel("TV show unavailable", "The selected TV show is no longer in the local catalog.") }
         Destination.Search -> DesignedSearchScreen(viewModel)
         Destination.MyList -> DesignedWatchlistScreen(viewModel)
@@ -236,13 +242,14 @@ private fun MovieDetailsScreen(movie: MovieEntity, favorite: Boolean, message: S
 }
 
 @Composable
-private fun SeriesDetailsScreen(
+internal fun SeriesDetailsScreen(
     series: SeriesEntity,
     episodes: List<SeriesEpisodeEntity>,
     progressItems: List<PlaybackProgressEntity>,
     state: OhUiState,
     play: (SeriesEpisodeEntity) -> Unit,
     toggleFavorite: () -> Unit,
+    retry: () -> Unit,
     back: () -> Unit,
 ) {
     var season by remember(series.providerId, episodes) { mutableStateOf(episodes.minOfOrNull { it.seasonNumber } ?: 1) }
@@ -302,15 +309,24 @@ private fun SeriesDetailsScreen(
                     Row(Modifier.weight(0.60f).fillMaxHeight(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                             Text("SEASON $season", color = WarmWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            if (state.message != null) Text(state.message, color = ErrorRed)
+                            if (episodes.isNotEmpty() && state.seriesDetailsError != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(state.seriesDetailsError, color = ErrorRed, modifier = Modifier.weight(1f))
+                                    OhButton("Retry", retry, compact = true)
+                                }
+                            }
                             when {
-                                state.busy -> StatusPanel("Loading episodes", "Reading this show from your service…")
-                                state.message != null -> StatusPanel("Episodes unavailable", state.message)
-                                episodes.isEmpty() -> StatusPanel("No episodes", "The provider returned no playable episodes for this show.")
-                                else -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                                episodes.isNotEmpty() -> LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                                     items(episodes.filter { it.seasonNumber == season }, key = { it.providerId }) { episode ->
                                         EpisodeCard(episode, progressByEpisode[episode.providerId]) { play(episode) }
                                     }
                                 }
+                                state.seriesDetailsError != null -> StatusPanel(
+                                    if (state.seriesDetailsLoading) "Loading episodes" else "Episodes unavailable", state.seriesDetailsError, "Retry", retry,
+                                )
+                                state.seriesDetailsLoading -> StatusPanel("Loading episodes", "Reading this show from your service…")
+                                else -> StatusPanel("No episodes", "The provider returned no playable episodes for this show.")
                             }
                         }
                         Column(Modifier.width(34.dp).fillMaxHeight(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
