@@ -3,6 +3,7 @@ use crate::{
     catalog::{CategoryKey, Channel, Kind, ProviderVod, VodKey},
 };
 use std::num::NonZeroUsize;
+#[derive(Clone)]
 pub struct Browse {
     pub account: AccountId,
     pub kind: Kind,

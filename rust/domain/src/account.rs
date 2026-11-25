@@ -81,3 +81,12 @@ impl Account {
         }
     }
 }
+
+/// Validate an externally allocated ID against the account identities in one snapshot.
+/// A durable account store must also enforce uniqueness at commit time.
+pub fn available_id<'a>(
+    candidate: &AccountId,
+    existing: impl IntoIterator<Item = &'a AccountId>,
+) -> bool {
+    !existing.into_iter().any(|id| id == candidate)
+}

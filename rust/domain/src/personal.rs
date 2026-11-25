@@ -21,6 +21,12 @@ pub enum Playback {
     OnDemand(OnDemand),
 }
 #[derive(Debug)]
+/// Persistent progress accepts only URL-independent movie or episode identities.
+/// A live playback target cannot be recorded.
+/// ```compile_fail
+/// use oh_domain::{catalog::ProviderKey,personal::{Progress,Playback}};
+/// fn save_live(key: ProviderKey) { Progress::record(Playback::Live(key), 5, 100, 0); }
+/// ```
 pub struct Progress {
     key: OnDemand,
     position: i64,
