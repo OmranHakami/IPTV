@@ -1,0 +1,88 @@
+name: L3 independent Rust verification
+on:
+  push:
+    branches: ['review/rust-domain-layer']
+    paths:
+      - 'rust/domain/**'
+      - '.github/workflows/l3-independent-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust-audit:
+    if: github.ref == 'refs/heads/review/rust-domain-layer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: rust/domain
+        shell: bash
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify pinned production and original test source
+        run: |
+          set -euo pipefail
+          baseline=23ccc9c31482b4ed1286569e7fbd82e3e0fb5e7d
+          git merge-base --is-ancestor "$baseline" HEAD
+          git diff --exit-code "$baseline" HEAD -- src Cargo.toml Cargo.lock tests/domain.rs
+          git rev-parse HEAD
+          git log -1 --format=%H "$baseline"
+      - name: Install official Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy --component llvm-tools-preview
+          rustup override set stable
+          rustc -vV
+          cargo -V
+          rustup show
+          uname -a
+          lscpu
+          free -h
+      - name: Original formatting and lint gates
+        run: |
+          baseline=23ccc9c31482b4ed1286569e7fbd82e3e0fb5e7d
+          tmp=$(mktemp -d)
+          git archive "$baseline" rust/domain | tar -x -C "$tmp"
+          cd "$tmp/rust/domain"
+          cargo +stable fmt --check
+          cargo +stable clippy --locked --all-targets -- -D warnings
+      - name: Original tests
+        if: always()
+        run: |
+          set -euo pipefail
+          cargo test --locked --test domain -- --nocapture
+          cargo test --locked --doc
+          cargo tree --locked
+      - name: All targets including independent tests
+        if: always()
+        run: cargo test --locked --all-targets -- --nocapture
+      - name: Independent formatting and lint
+        if: always()
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+      - name: Performance benchmarks
+        if: always()
+        run: cargo test --locked --release --test independent_review catalog_benchmark -- --ignored --nocapture
+      - name: LLVM source coverage
+        if: always()
+        run: |
+          set -euo pipefail
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          llvm="$(rustc --print sysroot)/lib/rustlib/$host/bin"
+          export CARGO_TARGET_DIR="$PWD/target/coverage"
+          export RUSTFLAGS="-C instrument-coverage"
+          export LLVM_PROFILE_FILE="$PWD/target/coverage/%p-%m.profraw"
+          mkdir -p "$CARGO_TARGET_DIR"
+          set +e
+          cargo test --locked --all-targets
+          test_status=$?
+          set -e
+          "$llvm/llvm-profdata" merge -sparse "$CARGO_TARGET_DIR"/*.profraw -o "$CARGO_TARGET_DIR/merged.profdata"
+          mapfile -t binaries < <(find "$CARGO_TARGET_DIR/debug/deps" -maxdepth 1 -type f -executable | sort)
+          args=()
+          for bin in "${binaries[@]}"; do args+=(-object "$bin"); done
+          "$llvm/llvm-cov" report "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" --ignore-filename-regex='(/rustc/|/tests/|/\.cargo/)'
+          exit "$test_status"
