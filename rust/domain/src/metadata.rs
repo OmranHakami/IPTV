@@ -1,5 +1,5 @@
 use crate::catalog::{Kind, ProviderVod, VodKey};
-use std::num::NonZeroU64;
+use std::{num::NonZeroU64, sync::Arc};
 
 pub use crate::presentation::Presentation;
 fn nonblank(value: &Option<String>) -> Option<&String> {
@@ -79,7 +79,9 @@ pub fn search_terms(name: &str, explicit: Option<i32>) -> (&str, Option<i32>) {
     (title, explicit)
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MatchInputs {
+pub struct MatchInputs(Arc<MatchData>);
+#[derive(Debug, Eq, PartialEq)]
+struct MatchData {
     key: VodKey,
     name: String,
     year: Option<i32>,
@@ -88,13 +90,13 @@ pub struct MatchInputs {
 }
 impl From<&ProviderVod> for MatchInputs {
     fn from(p: &ProviderVod) -> Self {
-        Self {
+        Self(Arc::new(MatchData {
             key: p.identity(),
             name: p.name.clone(),
             year: p.year,
             date: p.presentation.date.clone(),
             hint: p.tmdb_hint,
-        }
+        }))
     }
 }
 #[derive(Clone, Debug)]
@@ -118,11 +120,12 @@ pub struct Matched {
 impl MatchInputs {
     fn accepts(&self, c: &Candidate) -> bool {
         let explicit = self
+            .0
             .year
-            .or_else(|| self.date.as_ref()?.get(..4)?.parse().ok());
-        let (name, year) = search_terms(&self.name, explicit);
+            .or_else(|| self.0.date.as_ref()?.get(..4)?.parse().ok());
+        let (name, year) = search_terms(&self.0.name, explicit);
         let target = normalized(name);
-        c.kind == self.key.kind()
+        c.kind == self.0.key.kind()
             && !target.is_empty()
             && (year.is_none() || year == c.year)
             && (target == normalized(&c.title) || target == normalized(&c.original_title))
@@ -135,7 +138,7 @@ impl MatchInputs {
         }
     }
     pub fn supplied(&self, c: &Candidate) -> Option<Matched> {
-        (self.hint == Some(c.id.get()) && self.accepts(c))
+        (self.0.hint == Some(c.id.get()) && self.accepts(c))
             .then(|| self.matched(c, Provenance::Supplied))
     }
     pub fn fallback(&self, total_pages: u32, rows: &[Candidate]) -> Option<Matched> {
@@ -160,15 +163,21 @@ pub struct Enrichment {
     pub provenance: Provenance,
 }
 pub struct Vod {
+    current: MatchInputs,
     provider: ProviderVod,
     enrichment: Option<Enrichment>,
 }
 impl Vod {
     pub fn new(provider: ProviderVod) -> Self {
         Self {
+            current: MatchInputs::from(&provider),
             provider,
             enrichment: None,
         }
+    }
+    /// Capture before dispatching an asynchronous match. Clones retain this generation.
+    pub fn match_inputs(&self) -> MatchInputs {
+        self.current.clone()
     }
     pub fn provider(&self) -> &ProviderVod {
         &self.provider
@@ -177,19 +186,21 @@ impl Vod {
         self.enrichment.as_ref()
     }
     pub fn refresh(&mut self, provider: ProviderVod) -> bool {
-        if self.provider.identity() != provider.identity() {
+        let next = MatchInputs::from(&provider);
+        if self.current.0.key != next.0.key {
             return false;
         }
-        if MatchInputs::from(&self.provider) != MatchInputs::from(&provider) {
+        if self.current != next {
+            self.current = next;
             self.enrichment = None
         }
         self.provider = provider;
         true
     }
     pub fn attach(&mut self, matched: Matched, details: Details) -> bool {
-        if matched.inputs != MatchInputs::from(&self.provider)
+        if !Arc::ptr_eq(&matched.inputs.0, &self.current.0)
             || matched.id != details.id
-            || details.kind != matched.inputs.key.kind()
+            || details.kind != matched.inputs.0.key.kind()
         {
             return false;
         }

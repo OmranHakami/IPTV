@@ -141,7 +141,7 @@ fn enrichment_and_refresh() {
         let kind = p.identity().kind();
         let mut v = Vod::new(p.clone());
         assert_eq!(v.display().title.as_deref(), Some(p.name.as_str()));
-        let inputs = MatchInputs::from(&p);
+        let inputs = v.match_inputs();
         let c = candidate(kind, 2, "Dune", 2021);
         let token = || inputs.supplied(&c).unwrap();
         assert!(!v.attach(token(), details(kind, 4)));
@@ -175,6 +175,9 @@ fn enrichment_and_refresh() {
             },
         ] {
             assert!(v.refresh(p.clone()));
+            assert!(!v.attach(token(), details(kind, 2)));
+            let current = v.match_inputs();
+            let token = || current.supplied(&c).unwrap();
             assert!(v.attach(token(), details(kind, 2)));
             assert!(v.refresh(changed));
             assert!(v.enrichment().is_none());
@@ -512,7 +515,8 @@ fn display_date_uses_calendar_validity_without_mutating_sources() {
         ] {
             let mut d = details(kind, 2);
             d.presentation.date = raw.map(str::to_owned);
-            let token = MatchInputs::from(&p)
+            let token = v
+                .match_inputs()
                 .supplied(&candidate(kind, 2, "Dune", 2021))
                 .unwrap();
             assert!(v.attach(token, d));
@@ -524,5 +528,44 @@ fn display_date_uses_calendar_validity_without_mutating_sources() {
             );
             assert_eq!(v.provider(), &p);
         }
+    }
+}
+
+#[test]
+fn match_generation_is_owned_by_the_current_vod() {
+    for series in [false, true] {
+        let p = provider(series);
+        let kind = p.identity().kind();
+        let c = candidate(kind, 2, "Dune", 2021);
+        let mut v = Vod::new(p.clone());
+        let issued = v.match_inputs();
+        for other in [
+            p.clone(),
+            {
+                let mut q = p.clone();
+                q.key.account = account("b");
+                q
+            },
+            {
+                let mut q = p.clone();
+                q.key.id = "other".into();
+                q
+            },
+            provider(!series),
+        ] {
+            let mut other = Vod::new(other);
+            assert!(!other.attach(issued.supplied(&c).unwrap(), details(kind, 2)));
+        }
+        let mut changed = p.clone();
+        changed.category_id = None;
+        assert!(v.refresh(changed));
+        assert!(v.attach(issued.supplied(&c).unwrap(), details(kind, 2)));
+        let mut changed = p.clone();
+        changed.year = Some(2000);
+        assert!(v.refresh(changed));
+        assert!(v.refresh(p));
+        assert!(!v.attach(issued.supplied(&c).unwrap(), details(kind, 2)));
+        let current = v.match_inputs();
+        assert!(v.attach(current.supplied(&c).unwrap(), details(kind, 2)));
     }
 }
