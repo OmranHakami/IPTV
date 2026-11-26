@@ -1,0 +1,52 @@
+name: L3 independent coverage follow-up cycle 01
+on:
+  push:
+    branches: ['review/rust-domain-layer']
+    paths: ['.github/workflows/l3-cycle01-coverage.yml']
+permissions:
+  contents: read
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/review/rust-domain-layer'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pinned coverage and regression suite
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/crate"
+          git archive b660f685e21f014fe50d475fb6fe7d12f16d5cab rust/domain | tar -x -C "$RUNNER_TEMP/crate"
+          cd "$RUNNER_TEMP/crate/rust/domain"
+          for f in independent_review extended_review; do
+            git -C "$GITHUB_WORKSPACE" show "963ec44299908539b156a1ccbd7846cbf615842a:rust/domain/tests/$f.rs" > "tests/$f.rs"
+          done
+          patch --fuzz=0 -p1 < verification/reviewer-fixtures.patch
+          cp "$GITHUB_WORKSPACE/review/l3-cycle01/adversarial.rs" tests/cycle01.rs
+          cp "$GITHUB_WORKSPACE/review/reports/cycle01/suffix-boundaries.rs" tests/suffix_boundaries.rs
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+          rustup toolchain install nightly-2026-11-25 --profile minimal --component llvm-tools-preview
+          rustfmt +1.100.0 --edition 2021 tests/cycle01.rs tests/suffix_boundaries.rs
+          cargo +1.100.0 fmt --check
+          cargo +1.100.0 clippy --locked --all-targets -- -D warnings
+          cargo +1.100.0 test --locked --all-targets
+          cargo +1.100.0 test --locked --doc
+          cargo +1.100.0 tree --locked
+          toolchain=nightly-2026-11-25
+          rustc +"$toolchain" -vV
+          host=$(rustc +"$toolchain" -vV | sed -n 's/^host: //p')
+          llvm="$(rustc +"$toolchain" --print sysroot)/lib/rustlib/$host/bin"
+          export CARGO_TARGET_DIR="$PWD/target/branch"
+          export RUSTFLAGS="-C instrument-coverage -Z coverage-options=branch"
+          export LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/%p-%m.profraw"
+          mkdir -p "$CARGO_TARGET_DIR"
+          cargo +"$toolchain" test --locked --all-targets --no-fail-fast
+          "$llvm/llvm-profdata" merge -sparse "$CARGO_TARGET_DIR"/*.profraw -o "$CARGO_TARGET_DIR/merged.profdata"
+          mapfile -t binaries < <(find "$CARGO_TARGET_DIR/debug" -type f -executable \( -name "domain-*" -o -name "independent_review-*" -o -name "extended_review-*" -o -name "cycle01-*" -o -name "suffix_boundaries-*" -o -name "oh_domain-*" \) | sort)
+          args=()
+          for bin in "${binaries[@]}"; do args+=(-object "$bin"); done
+          "$llvm/llvm-cov" report "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" --ignore-filename-regex='(/rustc/|/tests/|/\.cargo/)'
+          "$llvm/llvm-cov" show "${binaries[0]}" "${args[@]:2}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" "$PWD/src/metadata.rs" -show-branches=count -show-line-counts-or-regions
