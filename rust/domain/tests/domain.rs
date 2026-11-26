@@ -569,3 +569,21 @@ fn match_generation_is_owned_by_the_current_vod() {
         assert!(v.attach(current.supplied(&c).unwrap(), details(kind, 2)));
     }
 }
+
+#[test]
+fn active_authentication_is_authoritative_over_past_expiry() {
+    let now = 1_001;
+    let active = Account::accept(profile("a"), reply(true, "aCtIvE"), now).unwrap();
+    assert_eq!(active.expiry(), Some(1_000));
+    assert_eq!(active.authenticated_at(), now);
+    for (auth, status, reason) in [
+        (true, "Expired", AuthError::Expired),
+        (false, "Active", AuthError::InvalidCredentials),
+        (true, "Disabled", AuthError::Malformed),
+    ] {
+        assert_eq!(
+            Account::accept(profile("a"), reply(auth, status), now).err(),
+            Some(reason)
+        );
+    }
+}
