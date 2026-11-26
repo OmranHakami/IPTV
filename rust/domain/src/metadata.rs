@@ -5,6 +5,34 @@ pub use crate::presentation::Presentation;
 fn nonblank(value: &Option<String>) -> Option<&String> {
     value.as_ref().filter(|s| !s.trim().is_empty())
 }
+/// TMDB release_date and first_air_date use YYYY-MM-DD.
+fn calendar_date(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        return false;
+    }
+    let decimal = |digits: &[u8]| {
+        digits.iter().try_fold(0u32, |n, &d| {
+            d.is_ascii_digit().then(|| n * 10 + u32::from(d - b'0'))
+        })
+    };
+    let (Some(year), Some(month), Some(day)) = (
+        decimal(&bytes[..4]),
+        decimal(&bytes[5..7]),
+        decimal(&bytes[8..]),
+    ) else {
+        return false;
+    };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let last = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        _ => return false,
+    };
+    year > 0 && (1..=last).contains(&day)
+}
 fn normalized(s: &str) -> String {
     s.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
@@ -190,7 +218,12 @@ impl Vod {
         Presentation {
             title: field(&t.title, &p.title).or_else(|| Some(self.provider.name.clone())),
             overview: field(&t.overview, &p.overview),
-            date: field(&t.date, &p.date),
+            date: t
+                .date
+                .as_ref()
+                .filter(|d| calendar_date(d.trim()))
+                .or_else(|| nonblank(&p.date))
+                .cloned(),
             poster: field(&t.poster, &p.poster),
             backdrop: field(&t.backdrop, &p.backdrop),
             trailer: field(&t.trailer, &p.trailer),

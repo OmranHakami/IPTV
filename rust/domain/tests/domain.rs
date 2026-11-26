@@ -491,3 +491,38 @@ fn catalog_replacement_contract() {
         assert_eq!(personal.resume_ms(), 6000);
     }
 }
+
+#[test]
+fn display_date_uses_calendar_validity_without_mutating_sources() {
+    for series in [false, true] {
+        let mut p = provider(series);
+        p.presentation.date = Some("2021".into());
+        let kind = p.identity().kind();
+        let mut v = Vod::new(p.clone());
+        for (raw, expected) in [
+            (None, "2021"),
+            (Some(" "), "2021"),
+            (Some("not-a-date"), "2021"),
+            (Some("1900-02-29"), "2021"),
+            (Some("2000-02-29"), "2000-02-29"),
+            (Some("2024-04-31"), "2021"),
+            (Some("2024-13-01"), "2021"),
+            (Some("2024-01-00"), "2021"),
+            (Some("2024-01-31"), "2024-01-31"),
+        ] {
+            let mut d = details(kind, 2);
+            d.presentation.date = raw.map(str::to_owned);
+            let token = MatchInputs::from(&p)
+                .supplied(&candidate(kind, 2, "Dune", 2021))
+                .unwrap();
+            assert!(v.attach(token, d));
+            assert_eq!(v.display().date.as_deref(), Some(expected));
+            assert_eq!(v.display().title.as_deref(), Some("TMDB"));
+            assert_eq!(
+                v.enrichment().unwrap().details.presentation.date.as_deref(),
+                raw
+            );
+            assert_eq!(v.provider(), &p);
+        }
+    }
+}
