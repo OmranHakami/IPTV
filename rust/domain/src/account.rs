@@ -70,6 +70,7 @@ pub fn latest(accounts: &[Account]) -> Option<&Account> {
 /// L4 must complete both obligations, including on retry. Each account gets a unique
 /// opaque ID from the caller. L5 enforces its uniqueness.
 pub struct Removal<'a> {
+    /// Includes the account-scoped recent search history.
     pub account_data: &'a AccountId,
     pub credential: &'a CredentialRef,
 }

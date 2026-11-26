@@ -1,8 +1,8 @@
 use crate::{
-    account::AccountId,
+    account::{AccountId, Removal},
     catalog::{CategoryKey, Channel, Kind, ProviderVod, VodKey},
 };
-use std::num::NonZeroUsize;
+use std::{collections::HashMap, num::NonZeroUsize};
 #[derive(Clone)]
 pub struct Browse {
     pub account: AccountId,
@@ -58,19 +58,24 @@ pub trait CachedCatalog {
     fn browse(&self, filter: &Browse, page: PageRequest) -> Result<Page<Self::Item>, Self::Error>;
 }
 #[derive(Default)]
-pub struct RecentSearches(Vec<String>);
+pub struct RecentSearches(HashMap<AccountId, Vec<String>>);
 impl RecentSearches {
-    pub fn record(&mut self, query: &str, had_results: bool) {
+    pub fn record(&mut self, account: &AccountId, query: &str, had_results: bool) {
         let q = query.trim();
         if !had_results || q.is_empty() {
             return;
         }
-        self.0.retain(|s| s.to_lowercase() != q.to_lowercase());
-        self.0.insert(0, q.to_owned());
-        self.0.truncate(3)
+        let entries = self.0.entry(account.clone()).or_default();
+        let folded = q.to_lowercase();
+        entries.retain(|s| s.to_lowercase() != folded);
+        entries.insert(0, q.to_owned());
+        entries.truncate(3)
     }
-    pub fn entries(&self) -> &[String] {
-        &self.0
+    pub fn entries(&self, account: &AccountId) -> &[String] {
+        self.0.get(account).map(Vec::as_slice).unwrap_or_default()
+    }
+    pub fn remove_account(&mut self, removal: &Removal<'_>) {
+        self.0.remove(removal.account_data);
     }
 }
 #[derive(Debug, Eq, PartialEq)]

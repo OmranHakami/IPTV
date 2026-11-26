@@ -341,11 +341,11 @@ fn discovery() {
     .includes(&m));
     let mut r = RecentSearches::default();
     for q in ["one", "two", "three", "four", " THREE "] {
-        r.record(q, true)
+        r.record(&filter.account, q, true)
     }
-    r.record("absent", false);
-    r.record(" ", true);
-    assert_eq!(r.entries(), ["THREE", "four", "two"]);
+    r.record(&filter.account, "absent", false);
+    r.record(&filter.account, " ", true);
+    assert_eq!(r.entries(&filter.account), ["THREE", "four", "two"]);
 }
 #[test]
 fn bounded_snapshot() {
@@ -586,4 +586,33 @@ fn active_authentication_is_authoritative_over_past_expiry() {
             Some(reason)
         );
     }
+}
+
+#[test]
+fn shared_search_history_is_account_scoped_and_removed_with_account() {
+    let a = account("a");
+    let b = account("b");
+    let mut history = RecentSearches::default();
+    for (user, q) in [
+        (&a, "one"),
+        (&b, "private b"),
+        (&a, "two"),
+        (&a, "Three"),
+        (&a, "four"),
+        (&b, "four"),
+        (&a, " THREE "),
+    ] {
+        history.record(user, q, true);
+    }
+    history.record(&a, "no results", false);
+    history.record(&b, "  ", true);
+    assert_eq!(history.entries(&a), ["THREE", "four", "two"]);
+    assert_eq!(history.entries(&b), ["four", "private b"]);
+    let owner = Account::accept(profile("a"), reply(true, "Active"), 1).unwrap();
+    history.remove_account(&owner.removal());
+    history.remove_account(&owner.removal());
+    assert!(history.entries(&a).is_empty());
+    assert_eq!(history.entries(&b), ["four", "private b"]);
+    history.record(&a, "new", true);
+    assert_eq!(history.entries(&a), ["new"]);
 }
