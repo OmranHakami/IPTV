@@ -44,7 +44,7 @@ jobs:
         run: |
           baseline=23ccc9c31482b4ed1286569e7fbd82e3e0fb5e7d
           tmp=$(mktemp -d)
-          git archive "$baseline" rust/domain | tar -x -C "$tmp"
+          git -C "$GITHUB_WORKSPACE" archive "$baseline" rust/domain | tar -x -C "$tmp"
           cd "$tmp/rust/domain"
           cargo +stable fmt --check
           cargo +stable clippy --locked --all-targets -- -D warnings
@@ -57,15 +57,22 @@ jobs:
           cargo tree --locked
       - name: All targets including independent tests
         if: always()
-        run: cargo test --locked --all-targets -- --nocapture
+        run: cargo test --locked --all-targets --no-fail-fast -- --nocapture
       - name: Independent formatting and lint
         if: always()
         run: |
+          set +e
           cargo fmt --check
+          fmt_status=$?
           cargo clippy --locked --all-targets -- -D warnings
+          lint_status=$?
+          echo "review fmt=$fmt_status clippy=$lint_status"
+          test "$fmt_status" = 0 && test "$lint_status" = 0
       - name: Performance benchmarks
         if: always()
-        run: cargo test --locked --release --test independent_review catalog_benchmark -- --ignored --nocapture
+        run: |
+          cargo test --locked --release --test independent_review catalog_benchmark -- --ignored --nocapture
+          cargo test --locked --release --test extended_review metadata_and_search_comparison -- --ignored --nocapture
       - name: LLVM source coverage
         if: always()
         run: |
@@ -77,12 +84,63 @@ jobs:
           export LLVM_PROFILE_FILE="$PWD/target/coverage/%p-%m.profraw"
           mkdir -p "$CARGO_TARGET_DIR"
           set +e
-          cargo test --locked --all-targets
+          cargo test --locked --all-targets --no-fail-fast
           test_status=$?
           set -e
           "$llvm/llvm-profdata" merge -sparse "$CARGO_TARGET_DIR"/*.profraw -o "$CARGO_TARGET_DIR/merged.profdata"
-          mapfile -t binaries < <(find "$CARGO_TARGET_DIR/debug/deps" -maxdepth 1 -type f -executable | sort)
+          mapfile -t binaries < <(find "$CARGO_TARGET_DIR/debug" -type f -executable \( -name "domain-*" -o -name "independent_review-*" -o -name "extended_review-*" -o -name "oh_domain-*" \) | sort)
           args=()
           for bin in "${binaries[@]}"; do args+=(-object "$bin"); done
           "$llvm/llvm-cov" report "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" --ignore-filename-regex='(/rustc/|/tests/|/\.cargo/)'
+          echo "Instrumented test status: $test_status (known A1 failure expected)"
           exit "$test_status"
+      - name: Targeted mutation testing in disposable copies
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import pathlib, shutil, subprocess, tempfile
+          root = pathlib.Path.cwd()
+          mutations = [
+              ("auth_gate", "account.rs", "if !reply.authenticated {", "if reply.authenticated {", "auth_and_removal"),
+              ("expiry_state", "account.rs", 'if reply.status.eq_ignore_ascii_case("expired") {', 'if reply.status.eq_ignore_ascii_case("active") {', "auth_and_removal"),
+              ("completion_threshold", "personal.rs", "i128::from(duration) * 9", "i128::from(duration) * 8", "playback_and_identity"),
+              ("resume_threshold", "personal.rs", "position < 5000", "position < 4999", "playback_and_identity"),
+              ("scope_failure", "sync.rs", "Outcome::Cancelled => self.previous,", "Outcome::Cancelled => Scope::default(),", "sync_outcomes"),
+              ("empty_replacement", "sync.rs", "Self::Success(_) => RefreshAction::Replace,", "Self::Success(0) => RefreshAction::Retain, Self::Success(_) => RefreshAction::Replace,", "catalog_replacement_contract"),
+              ("match_ambiguity", "metadata.rs", ".all(|c| c.id == first.id)", ".all(|_| true)", "matching"),
+              ("pairing_expiry", "pairing.rs", "Some(0..300_000)", "Some(0..300_001)", "pairing"),
+              ("category_filter", "discovery.rs", "self.category.is_none() || self.category == row.category_id", "true", "discovery"),
+              ("focus_threshold", "discovery.rs", "Some(0..5000)", "Some(0..4999)", "focus_and_tracks"),
+          ]
+          killed = survived = invalid = 0
+          for name, file, old, new, test in mutations:
+              with tempfile.TemporaryDirectory(prefix="l3-mutant-") as d:
+                  dest = pathlib.Path(d)
+                  for f in ("Cargo.toml", "Cargo.lock"):
+                      shutil.copy(root/f, dest/f)
+                  shutil.copytree(root/"src", dest/"src")
+                  shutil.copytree(root/"tests", dest/"tests")
+                  path = dest/"src"/file
+                  source = path.read_text()
+                  if old not in source:
+                      print(f"MUTANT {name} INVALID pattern missing")
+                      invalid += 1
+                      continue
+                  path.write_text(source.replace(old, new, 1))
+                  result = subprocess.run(["cargo", "test", "--locked", "--test", "domain", test, "--", "--exact"], cwd=dest, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                  if result.returncode == 0:
+                      status = "SURVIVED"
+                      survived += 1
+                  elif "test result: FAILED" in result.stdout:
+                      status = "KILLED"
+                      killed += 1
+                  else:
+                      status = "INVALID"
+                      invalid += 1
+                  print(f"MUTANT {name} {status} test={test}", flush=True)
+                  if status != "KILLED":
+                      print(result.stdout, flush=True)
+          print(f"MUTATION_TOTAL killed={killed} survived={survived} invalid={invalid}", flush=True)
+          if survived or invalid:
+              raise SystemExit(1)
+          PY
