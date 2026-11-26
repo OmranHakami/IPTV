@@ -1,0 +1,134 @@
+name: L3 independent advanced verification cycle 01
+on:
+  push:
+    branches: ['review/rust-domain-layer']
+    paths: ['.github/workflows/l3-cycle01-advanced.yml']
+permissions:
+  contents: read
+jobs:
+  advanced:
+    if: github.ref == 'refs/heads/review/rust-domain-layer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [mutation, fuzz, branch-coverage, allocations]
+    env:
+      OLD: 23ccc9c31482b4ed1286569e7fbd82e3e0fb5e7d
+      NEW: b660f685e21f014fe50d475fb6fe7d12f16d5cab
+      REVIEW: 963ec44299908539b156a1ccbd7846cbf615842a
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Assemble corrected crate
+        run: |
+          set -euxo pipefail
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt
+          mkdir -p "$RUNNER_TEMP/new"
+          git archive "$NEW" rust/domain | tar -x -C "$RUNNER_TEMP/new"
+          cd "$RUNNER_TEMP/new/rust/domain"
+          rustup override set 1.100.0
+          for f in independent_review extended_review; do
+            git -C "$GITHUB_WORKSPACE" show "$REVIEW:rust/domain/tests/$f.rs" > "tests/$f.rs"
+          done
+          patch --fuzz=0 -p1 < verification/reviewer-fixtures.patch
+          cp "$GITHUB_WORKSPACE/review/l3-cycle01/adversarial.rs" tests/cycle01.rs
+          rustfmt --edition 2021 tests/cycle01.rs
+      - name: Crate-wide automated mutation campaign
+        if: matrix.check == 'mutation'
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP/new/rust/domain"
+          cargo install cargo-mutants --version 27.1.0 --locked
+          cargo mutants --version
+          cargo mutants --list --json > "$RUNNER_TEMP/mutants.json"
+          python3 -c 'import json,os; print("MUTANTS_GENERATED",len(json.load(open(os.environ["RUNNER_TEMP"]+"/mutants.json"))))'
+          set +e
+          time timeout 900 cargo mutants --jobs 4 --no-shuffle --timeout 30 --caught --unviable --output "$RUNNER_TEMP/mutation"
+          result=$?
+          set -e
+          echo "MUTATION_EXIT=$result"
+          find "$RUNNER_TEMP/mutation" -name outcomes.json -exec cat {} \;
+          exit "$result"
+      - name: Coverage-guided libFuzzer
+        if: matrix.check == 'fuzz'
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP/new/rust/domain"
+          rustup toolchain install nightly --profile minimal
+          rustc +nightly -vV
+          cargo +1.100.0 install cargo-fuzz --version 0.13.2 --locked
+          cargo fuzz --version
+          mkdir -p fuzz/fuzz_targets fuzz/corpus/domain
+          cat > fuzz/Cargo.toml <<'EOF'
+          [package]
+          name = "oh-domain-fuzz"
+          version = "0.0.0"
+          publish = false
+          edition = "2021"
+          [package.metadata]
+          cargo-fuzz = true
+          [dependencies]
+          libfuzzer-sys = "=0.4.13"
+          oh-domain = {path = ".."}
+          [[bin]]
+          name = "domain"
+          path = "fuzz_targets/domain.rs"
+          test = false
+          doc = false
+          bench = false
+          [workspace]
+          members = ["."]
+          EOF
+          cp "$GITHUB_WORKSPACE/review/l3-cycle01/fuzz.rs" fuzz/fuzz_targets/domain.rs
+          printf '2024-02-29' > fuzz/corpus/domain/valid_date
+          printf '1900-02-29' > fuzz/corpus/domain/invalid_date
+          printf 'Film (2024) [4K]' > fuzz/corpus/domain/title
+          cargo +nightly fuzz run domain -- -runs=100000 -max_len=512 -timeout=10 -seed=12345 -print_final_stats=1
+      - name: Nightly branch coverage
+        if: matrix.check == 'branch-coverage'
+        run: |
+          set -euxo pipefail
+          cd "$RUNNER_TEMP/new/rust/domain"
+          rustup toolchain install nightly --profile minimal --component llvm-tools-preview
+          rustc +nightly -vV
+          host=$(rustc +nightly -vV | sed -n 's/^host: //p')
+          llvm="$(rustc +nightly --print sysroot)/lib/rustlib/$host/bin"
+          export CARGO_TARGET_DIR="$PWD/target/branch"
+          export RUSTFLAGS="-C instrument-coverage -Z coverage-options=branch"
+          export LLVM_PROFILE_FILE="$CARGO_TARGET_DIR/%p-%m.profraw"
+          mkdir -p "$CARGO_TARGET_DIR"
+          cargo +nightly test --locked --all-targets --no-fail-fast
+          "$llvm/llvm-profdata" merge -sparse "$CARGO_TARGET_DIR"/*.profraw -o "$CARGO_TARGET_DIR/merged.profdata"
+          mapfile -t binaries < <(find "$CARGO_TARGET_DIR/debug" -type f -executable \( -name "domain-*" -o -name "independent_review-*" -o -name "extended_review-*" -o -name "cycle01-*" -o -name "oh_domain-*" \) | sort)
+          args=()
+          for bin in "${binaries[@]}"; do args+=(-object "$bin"); done
+          "$llvm/llvm-cov" report "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" --ignore-filename-regex='(/rustc/|/tests/|/\.cargo/)'
+          "$llvm/llvm-cov" show "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" "$PWD/src/metadata.rs" -show-branches=count
+      - name: Same-runner allocation and peak memory comparison
+        if: matrix.check == 'allocations'
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/old"
+          git archive "$OLD" rust/domain | tar -x -C "$RUNNER_TEMP/old"
+          for v in old new; do
+            cd "$RUNNER_TEMP/$v/rust/domain"
+            mkdir -p examples
+            cp "$GITHUB_WORKSPACE/review/l3-cycle01/allocations.rs" examples/review_alloc.rs
+            if [ "$v" = old ]; then
+              python3 - <<'PY'
+          import pathlib
+          p=pathlib.Path('examples/review_alloc.rs')
+          s=p.read_text().replace('v.match_inputs().supplied(c)', 'MatchInputs::from(r).supplied(c)')
+          s=s.replace('let mut storage=RecentSearches::default();','let mut storage:Vec<RecentSearches>=Vec::new();')
+          s=s.replace('for account in &accounts{for q in ["one","two","three","four"]{storage.record(account,q,true);}}','for _account in &accounts{let mut entry=RecentSearches::default();for q in ["one","two","three","four"]{entry.record(q,true);}storage.push(entry);}')
+          p.write_text(s)
+          PY
+            fi
+            echo "ALLOC_VERSION=$v"
+            cargo +1.100.0 build --locked --release --example review_alloc
+            /usr/bin/time -v target/release/examples/review_alloc
+          done
