@@ -1,16 +1,16 @@
 # L3 requirements traceability
 
-Baseline: Domain-Layer.md §§3–8, checked against main at `b01dd17`. Rust module names below resolve under `src/`. Named integration tests are in `tests/domain.rs`. The verification report explains which effects require an adapter or device.
+Baseline: Domain-Layer.md §§3–8, checked against main at `b01dd17`. Rust module names below resolve under `src/`. Implementation tests are in `tests/domain.rs`. Reviewer test names refer to the pinned independent fixtures described in VERIFICATION.md. The verification report explains which effects require an adapter or device.
 
 | ID | Requirement | Implementation | Automated test |
 |---|---|---|---|
 | DOM-001 | Xtream account | account::XtreamProfile | auth_and_removal |
 | DOM-002 | Unique account IDs | account::available_id | unique_accounts_and_opaque_ids |
-| DOM-003 | Authenticate before acceptance | account::Account::accept | auth_and_removal |
-| DOM-004 | Retain status and expiry | account::Account | auth_and_removal |
+| DOM-003 | Authenticate before acceptance | account::Account::accept | auth_and_removal, active_authentication_is_authoritative_over_past_expiry |
+| DOM-004 | Retain status and expiry | account::Account | auth_and_removal, active_authentication_is_authoritative_over_past_expiry |
 | DOM-005 | Latest authentication | account::latest | auth_and_removal |
-| DOM-006 | Account-scoped records | catalog::ProviderKey, personal::OnDemand | playback_and_identity, favorites |
-| DOM-007 | Deletion includes account rows and credential handle | account::Removal | auth_and_removal |
+| DOM-006 | Account-scoped records | catalog::ProviderKey, personal::OnDemand, discovery::RecentSearches | playback_and_identity, favorites, shared_search_history_is_account_scoped_and_removed_with_account |
+| DOM-007 | Deletion includes account rows, search history and credential handle | account::Removal, RecentSearches::remove_account | auth_and_removal, shared_search_history_is_account_scoped_and_removed_with_account |
 | DOM-008 | Credential handle only | account::XtreamProfile, CredentialRef | auth_and_removal |
 | DOM-009 | Live, movie and series catalogs | catalog::Kind, Channel, VodType | ordering, discovery |
 | DOM-010 | Opaque provider identifiers | catalog::ProviderKey | unique_accounts_and_opaque_ids |
@@ -20,21 +20,21 @@ Baseline: Domain-Layer.md §§3–8, checked against main at `b01dd17`. Rust mod
 | DOM-014 | Channel number and EPG identity | catalog::Channel | ordering |
 | DOM-015 | Playable provider row without optional enrichment | metadata::Vod::new, display | enrichment_and_refresh |
 | DOM-016 | Independent catalog counts | sync::Summary | sync_outcomes |
-| DOM-017 | Source separation | metadata::Vod, Enrichment | enrichment_and_refresh |
-| DOM-018 | Provider membership, category and playback identity | catalog::ProviderVod, personal::Playback | enrichment_and_refresh, playback_and_identity |
-| DOM-019 | Preferred presentation fields | metadata::Vod::display | enrichment_and_refresh |
-| DOM-020 | Per-field fallback | metadata::Vod::display | enrichment_and_refresh |
-| DOM-021 | Supplied hint and resolved match | metadata::MatchInputs, Enrichment | matching, enrichment_and_refresh |
-| DOM-022 | Invalidate obsolete movie enrichment | metadata::Vod::refresh, attach | enrichment_and_refresh |
+| DOM-017 | Source separation | metadata::Vod, Enrichment | enrichment_and_refresh, module_graph_must_be_acyclic |
+| DOM-018 | Provider membership, category and playback identity | catalog::ProviderVod, personal::Playback | enrichment_and_refresh, playback_and_identity, module_graph_must_be_acyclic |
+| DOM-019 | Preferred presentation fields | metadata::Vod::display | enrichment_and_refresh, invalid_tmdb_date_must_fall_back_to_provider, display_date_uses_calendar_validity_without_mutating_sources |
+| DOM-020 | Per-field fallback | metadata::Vod::display | enrichment_and_refresh, invalid_tmdb_date_must_fall_back_to_provider, display_date_uses_calendar_validity_without_mutating_sources |
+| DOM-021 | Supplied hint and resolved match | metadata::MatchInputs, Enrichment | matching, enrichment_and_refresh, match_generation_is_owned_by_the_current_vod |
+| DOM-022 | Invalidate obsolete movie enrichment | metadata::Vod::refresh, attach | enrichment_and_refresh, match_generation_is_owned_by_the_current_vod, changed_then_restored_inputs_must_not_accept_old_match |
 | DOM-023 | Unmatched row remains available | metadata::Vod::display | enrichment_and_refresh |
-| DOM-024 | Reject unrelated match | metadata::MatchInputs::accepts | matching |
+| DOM-024 | Reject unrelated match | metadata::MatchInputs::accepts | matching, match_generation_is_owned_by_the_current_vod |
 | DOM-025 | Independent scopes | sync::Summary | sync_outcomes |
 | DOM-026 | Scope progress and outcomes | sync::Refresh | sync_outcomes |
 | DOM-027 | Partial success | sync::Summary::usable | sync_outcomes |
 | DOM-028 | Last usable cache after failure | sync::Refresh::finish | sync_outcomes, catalog_replacement_contract |
 | DOM-029 | Empty versus failed | sync::State | sync_outcomes |
 | DOM-030 | Removal only after successful refresh | sync::Outcome::catalog_action | catalog_replacement_contract |
-| DOM-031 | Retain valid enrichment | metadata::Vod::refresh | enrichment_and_refresh |
+| DOM-031 | Retain valid enrichment | metadata::Vod::refresh | enrichment_and_refresh, match_generation_is_owned_by_the_current_vod |
 | DOM-032 | Keep personal records across refresh | sync::RefreshAction, personal::Progress, Favorites | catalog_replacement_contract |
 | DOM-033 | Live, movie and episode targets | personal::Playback, OnDemand | playback_and_identity |
 | DOM-034 | URL-independent playback identity | personal::OnDemand, Playback | playback_and_identity |
@@ -60,17 +60,17 @@ Baseline: Domain-Layer.md §§3–8, checked against main at `b01dd17`. Rust mod
 | DOM-054 | Channel order | catalog::channel_order | ordering |
 | DOM-055 | Episode order | catalog::episode_order | ordering |
 | DOM-056 | Cached browse port | discovery::CachedCatalog | bounded_snapshot |
-| DOM-057 | Authentication flag and active status | account::Account::accept | auth_and_removal |
-| DOM-058 | Typed failure reasons | account::AuthError | auth_and_removal |
+| DOM-057 | Authentication flag and active status | account::Account::accept | auth_and_removal, active_authentication_is_authoritative_over_past_expiry |
+| DOM-058 | Typed failure reasons | account::AuthError | auth_and_removal, active_authentication_is_authoritative_over_past_expiry |
 | DOM-059 | Five-minute one-time session | pairing::Session::accept | pairing |
 | DOM-060 | Pairing code normalization | pairing::normalize | pairing |
 | DOM-061 | Clean title and prefer explicit year | metadata::search_terms | matching |
 | DOM-062 | Unique normalized title/year match | metadata::MatchInputs::fallback | matching |
 | DOM-063 | Reject ambiguous multipage results | metadata::MatchInputs::fallback | matching |
-| DOM-064 | Validate supplied TMDB ID | metadata::MatchInputs::supplied | matching |
-| DOM-065 | Series matching and invalidation | metadata::MatchInputs, Vod::refresh | matching, enrichment_and_refresh |
+| DOM-064 | Validate supplied TMDB ID | metadata::MatchInputs::supplied | matching, match_generation_is_owned_by_the_current_vod |
+| DOM-065 | Series matching and invalidation | metadata::MatchInputs, Vod::refresh | matching, enrichment_and_refresh, match_generation_is_owned_by_the_current_vod, changed_then_restored_inputs_must_not_accept_old_match |
 | DOM-066 | Trimmed original-name substring search | discovery::Browse::matches | discovery |
-| DOM-067 | Three recent successful distinct searches | discovery::RecentSearches | discovery |
+| DOM-067 | Three recent successful distinct searches per account | discovery::RecentSearches | discovery, shared_search_history_is_account_scoped_and_removed_with_account |
 | DOM-068 | Continuous focus and immediate metadata | discovery::CardFocus | focus_and_tracks |
 | DOM-069 | Missing trailer fallback | discovery::preview | focus_and_tracks |
 | DOM-070 | Track selection and optional lookup eligibility | personal::selectable, subtitle_lookup_enabled | focus_and_tracks |

@@ -1,0 +1,69 @@
+--- a/tests/extended_review.rs
++++ b/tests/extended_review.rs
+@@ -132,13 +132,16 @@
+ #[test]
+ fn metadata_scope_and_stale_match_inputs() {
+     let original = provider(0);
+-    let inputs = MatchInputs::from(&original);
+     let mut vod = Vod::new(original.clone());
++    let inputs = vod.match_inputs();
+     assert!(vod.attach(inputs.supplied(&candidate(0)).unwrap(), details()));
+     let other = provider(1);
+     assert!(!vod.refresh(other.clone()));
+     assert!(!vod.attach(
+-        MatchInputs::from(&other).supplied(&candidate(1)).unwrap(),
++        Vod::new(other.clone())
++            .match_inputs()
++            .supplied(&candidate(1))
++            .unwrap(),
+         details()
+     ));
+     assert_eq!(vod.provider(), &original);
+@@ -153,10 +156,10 @@
+ fn recent_searches_instance_isolation() {
+     let mut a = RecentSearches::default();
+     let mut b = RecentSearches::default();
+-    a.record("private A", true);
+-    b.record("private B", true);
+-    assert_eq!(a.entries(), ["private A"]);
+-    assert_eq!(b.entries(), ["private B"]);
++    a.record(&AccountId("a".into()), "private A", true);
++    b.record(&AccountId("b".into()), "private B", true);
++    assert_eq!(a.entries(&AccountId("a".into())), ["private A"]);
++    assert_eq!(b.entries(&AccountId("b".into())), ["private B"]);
+ }
+
+ #[test]
+@@ -203,7 +206,7 @@
+             let t = Instant::now();
+             for (r, c) in rows.iter().zip(&candidates) {
+                 let mut vod = Vod::new(r.clone());
+-                let token = MatchInputs::from(r).supplied(c).unwrap();
++                let token = vod.match_inputs().supplied(c).unwrap();
+                 assert!(vod.attach(token, details()));
+                 assert!(vod.refresh(r.clone()));
+                 black_box(vod.display());
+@@ -221,10 +224,8 @@
+     // Domain-Layer.md section 7: changed match inputs during enrichment
+     // must not allow the old result to be committed, even if inputs return to A.
+     let original = provider(0);
+-    let token = MatchInputs::from(&original)
+-        .supplied(&candidate(0))
+-        .unwrap();
+     let mut vod = Vod::new(original.clone());
++    let token = vod.match_inputs().supplied(&candidate(0)).unwrap();
+     let mut changed = original.clone();
+     changed.name = "Different title".into();
+     assert!(vod.refresh(changed));
+@@ -236,10 +237,8 @@
+ fn invalid_tmdb_date_must_fall_back_to_provider() {
+     // DOM-019/020: prefer valid TMDB fields, otherwise field-level fallback.
+     let original = provider(0);
+-    let token = MatchInputs::from(&original)
+-        .supplied(&candidate(0))
+-        .unwrap();
+     let mut vod = Vod::new(original);
++    let token = vod.match_inputs().supplied(&candidate(0)).unwrap();
+     let mut metadata = details();
+     metadata.presentation.date = Some("not-a-date".into());
+     assert!(vod.attach(token, metadata));
