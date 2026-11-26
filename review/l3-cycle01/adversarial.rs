@@ -171,7 +171,7 @@ fn auth_authority_and_history_model() {
         let i = (seed >> 16) as usize % ids.len();
         let q = queries[(seed >> 32) as usize % queries.len()];
         let successful = seed & 3 != 0;
-        if seed % 17 == 0 {
+        if seed.is_multiple_of(17) {
             let owner = account(&ids[i], true, "Active", None).unwrap();
             h.remove_account(&owner.removal());
             h.remove_account(&owner.removal());
@@ -217,4 +217,69 @@ fn every_attempt_outcome_with_distinct_prior_states() {
         if outcomes == [Outcome::Success(0);3] { confirmations += 1; assert!(!s.usable()); }
     }}}
     assert_eq!(confirmations,1);
+}
+
+#[test]
+fn pairing_linearization_orders_and_competing_threads() {
+    use oh_domain::pairing::{Rejection, Session};
+    use std::sync::Barrier;
+    // For these operation types, enumerate each possible ordering at the
+    // only state-changing operation (the production compare_exchange).
+    let operations = [("ABC", 0), ("ABC", 299999), ("wrong", 10), ("ABC", 300000)];
+    for a in 0..4 { for b in 0..4 { for c in 0..4 { for d in 0..4 {
+        let order = [a,b,c,d];
+        let mut seen = [false;4];
+        if !order.iter().all(|&i| {let fresh=!seen[i];seen[i]=true;fresh}) {continue;}
+        let s = Session::new("id".into(), "ABC", 0).unwrap();
+        let mut consumed=false;
+        for i in order {
+            let expected = match i {
+                2 => Err(Rejection::WrongCode),
+                3 => Err(Rejection::Expired),
+                _ if consumed => Err(Rejection::Consumed),
+                _ => {consumed=true;Ok(())},
+            };
+            assert_eq!(s.accept(operations[i].0,operations[i].1),expected);
+        }
+    }}}}
+    for _ in 0..128 {
+        let s=Session::new("id".into(),"ABC",0).unwrap();
+        let barrier=Barrier::new(4);
+        std::thread::scope(|scope| {
+            let handles:Vec<_>=operations.iter().map(|&(code,now)| {
+                let s=&s;let barrier=&barrier;
+                scope.spawn(move || {barrier.wait();s.accept(code,now)})
+            }).collect();
+            let results:Vec<_>=handles.into_iter().map(|h|h.join().unwrap()).collect();
+            assert_eq!(results[2],Err(Rejection::WrongCode));
+            assert_eq!(results[3],Err(Rejection::Expired));
+            assert_eq!(results[..2].iter().filter(|r|r.is_ok()).count(),1);
+            assert_eq!(results[..2].iter().filter(|r|**r==Err(Rejection::Consumed)).count(),1);
+        });
+    }
+}
+#[test]
+fn candidate_boundary_and_failed_attach_retains_enrichment() {
+    let mut p=provider(Kind::Movie);
+    p.year=None;
+    p.presentation.date=Some("2024-01-01".into());
+    let mut v=Vod::new(p);
+    let mut c=candidate(Kind::Movie);
+    let current=v.match_inputs();
+    c.title="not a match".into();
+    c.original_title="Film".into();
+    assert!(current.supplied(&c).is_some());
+    c.year=Some(2023);
+    assert!(current.supplied(&c).is_none());
+    c.year=Some(2024);
+    assert!(current.fallback(1,&[]).is_none());
+    assert!(current.fallback(0,std::slice::from_ref(&c)).is_none());
+    assert!(v.attach(current.supplied(&c).unwrap(),details(Kind::Movie)));
+    let mut bad=details(Kind::Series);
+    bad.presentation.title=Some("foreign".into());
+    assert!(!v.attach(current.supplied(&c).unwrap(),bad));
+    assert!(v.enrichment().is_some());
+    let mut bad_hint=c.clone();
+    bad_hint.id=NonZeroU64::new(43).unwrap();
+    assert!(current.supplied(&bad_hint).is_none());
 }

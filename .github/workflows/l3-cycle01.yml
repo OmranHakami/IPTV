@@ -126,7 +126,7 @@ jobs:
           args=()
           for bin in "${binaries[@]}"; do args+=(-object "$bin"); done
           "$llvm/llvm-cov" report "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" --ignore-filename-regex='(/rustc/|/tests/|/\.cargo/)'
-          "$llvm/llvm-cov" show "${args[@]}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" "$PWD/src/metadata.rs" -show-line-counts-or-regions
+          "$llvm/llvm-cov" show "${binaries[0]}" "${args[@]:2}" -instr-profile="$CARGO_TARGET_DIR/merged.profdata" "$PWD/src/metadata.rs" -show-line-counts-or-regions
       - name: Preserve source identity
         if: always()
         run: |
