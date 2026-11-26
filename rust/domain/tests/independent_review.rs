@@ -45,12 +45,30 @@ fn module_graph_must_be_acyclic() {
 #[test]
 fn all_current_outcomes_not_just_cached_states() {
     let prior_empty = Scope::default().begin().finish(Outcome::Success(0));
-    for a in [Outcome::Success(0), Outcome::Success(1), Outcome::Failed, Outcome::Cancelled] {
-        for b in [Outcome::Success(0), Outcome::Success(1), Outcome::Failed, Outcome::Cancelled] {
-            for c in [Outcome::Success(0), Outcome::Success(1), Outcome::Failed, Outcome::Cancelled] {
+    for a in [
+        Outcome::Success(0),
+        Outcome::Success(1),
+        Outcome::Failed,
+        Outcome::Cancelled,
+    ] {
+        for b in [
+            Outcome::Success(0),
+            Outcome::Success(1),
+            Outcome::Failed,
+            Outcome::Cancelled,
+        ] {
+            for c in [
+                Outcome::Success(0),
+                Outcome::Success(1),
+                Outcome::Failed,
+                Outcome::Cancelled,
+            ] {
                 let outcomes = [a, b, c];
                 let mut summary = Summary::default();
-                for (kind, outcome) in [Kind::Live, Kind::Movie, Kind::Series].into_iter().zip(outcomes) {
+                for (kind, outcome) in [Kind::Live, Kind::Movie, Kind::Series]
+                    .into_iter()
+                    .zip(outcomes)
+                {
                     *summary.get_mut(kind) = prior_empty.begin().finish(outcome);
                     assert_eq!(
                         outcome.catalog_action() == RefreshAction::Replace,
@@ -119,7 +137,7 @@ fn account_isolation_and_large_catalog() {
     let mut favorites = Favorites::default();
     let mut progress = Vec::new();
     for i in 0..100_000 {
-        let account = if i % 2 == 0 { "a" } else { "b" };
+        let account = if i & 1 == 0 { "a" } else { "b" };
         let r = row(account, i);
         assert_eq!(filter.matches(&r, " provider "), account == "a");
         favorites.add(r.identity(), i as i64);
@@ -143,10 +161,24 @@ fn matching_rejects_wrong_year_kind_and_ambiguity() {
         original_title: String::new(),
         year,
     };
-    assert!(inputs.fallback(1, &[candidate(Kind::Movie, 1, None)]).is_none());
-    assert!(inputs.fallback(1, &[candidate(Kind::Series, 1, Some(2021))]).is_none());
-    assert!(inputs.fallback(1, &[candidate(Kind::Movie, 1, Some(2021))]).is_some());
-    assert!(inputs.fallback(1, &[candidate(Kind::Movie, 1, Some(2021)), candidate(Kind::Movie, 2, Some(2021))]).is_none());
+    assert!(inputs
+        .fallback(1, &[candidate(Kind::Movie, 1, None)])
+        .is_none());
+    assert!(inputs
+        .fallback(1, &[candidate(Kind::Series, 1, Some(2021))])
+        .is_none());
+    assert!(inputs
+        .fallback(1, &[candidate(Kind::Movie, 1, Some(2021))])
+        .is_some());
+    assert!(inputs
+        .fallback(
+            1,
+            &[
+                candidate(Kind::Movie, 1, Some(2021)),
+                candidate(Kind::Movie, 2, Some(2021))
+            ]
+        )
+        .is_none());
 }
 
 #[test]
@@ -156,12 +188,17 @@ fn pairing_repeated_contention() {
         let barrier = Barrier::new(8);
         let winners = std::thread::scope(|scope| {
             let jobs: Vec<_> = (0..8)
-                .map(|_| scope.spawn(|| {
-                    barrier.wait();
-                    session.accept("xy", 299_999).is_ok()
-                }))
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        session.accept("xy", 299_999).is_ok()
+                    })
+                })
                 .collect();
-            jobs.into_iter().filter_map(|job| job.join().ok()).filter(|won| *won).count()
+            jobs.into_iter()
+                .filter_map(|job| job.join().ok())
+                .filter(|won| *won)
+                .count()
         });
         assert_eq!(winners, 1);
         assert!(session.accept("xy", 300_010).is_err());
@@ -172,9 +209,21 @@ fn pairing_repeated_contention() {
 #[ignore = "manual release-mode benchmark; timings are environment-specific"]
 fn catalog_benchmark() {
     for n in [1_000, 10_000, 50_000, 100_000] {
-        let rows: Vec<_> = (0..n).map(|i| row(if i % 2 == 0 { "a" } else { "b" }, i)).collect();
-        let filter = Browse { account: AccountId("a".into()), kind: Kind::Movie, category: None };
-        let progress: Vec<_> = rows.iter().enumerate().map(|(i, r)| Progress::record(OnDemand::Movie(r.key.clone()), 6000, 100000, i as i64).unwrap()).collect();
+        let rows: Vec<_> = (0..n)
+            .map(|i| row(if i & 1 == 0 { "a" } else { "b" }, i))
+            .collect();
+        let filter = Browse {
+            account: AccountId("a".into()),
+            kind: Kind::Movie,
+            category: None,
+        };
+        let progress: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                Progress::record(OnDemand::Movie(r.key.clone()), 6000, 100000, i as i64).unwrap()
+            })
+            .collect();
         let mut favorites = Favorites::default();
         for (i, r) in rows.iter().enumerate() {
             favorites.add(r.identity(), i as i64);
@@ -194,7 +243,12 @@ fn catalog_benchmark() {
             let start = Instant::now();
             black_box(favorites.newest(&filter.account));
             let favorite = start.elapsed();
-            println!("n={n},search_ns={},recent_ns={},favorite_ns={}", search.as_nanos(), recent.as_nanos(), favorite.as_nanos());
+            println!(
+                "n={n},search_ns={},recent_ns={},favorite_ns={}",
+                search.as_nanos(),
+                recent.as_nanos(),
+                favorite.as_nanos()
+            );
         }
     }
 }

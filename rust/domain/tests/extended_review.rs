@@ -11,7 +11,7 @@ use std::{hint::black_box, num::NonZeroU64, time::Instant};
 fn provider(i: usize) -> ProviderVod {
     ProviderVod {
         key: ProviderKey {
-            account: AccountId(if i % 2 == 0 { "a" } else { "b" }.into()),
+            account: AccountId(if i & 1 == 0 { "a" } else { "b" }.into()),
             id: format!("{i:08}"),
         },
         media: VodType::Movie {
@@ -63,7 +63,9 @@ fn details() -> Details {
 #[test]
 fn generated_title_and_pairing_inputs() {
     // Deterministic generated-input fuzz-style smoke test, not libFuzzer.
-    let chars = ['A', 'z', ' ', '-', '(', ')', '[', ']', '4', 'K', 'é', 'ع', 'ß', '\0', '🙂'];
+    let chars = [
+        'A', 'z', ' ', '-', '(', ')', '[', ']', '4', 'K', 'é', 'ع', 'ß', '\0', '🙂',
+    ];
     let mut state = 0x1234_5678_9abc_def0_u64;
     for i in 0..20_000 {
         let mut text = String::new();
@@ -168,9 +170,13 @@ fn metadata_and_search_comparison() {
             kind: Kind::Movie,
             category: None,
         };
-        let progress: Vec<_> = rows.iter().enumerate().map(|(i, r)| {
-            Progress::record(OnDemand::Movie(r.key.clone()), 6000, 100000, i as i64).unwrap()
-        }).collect();
+        let progress: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, r)| {
+                Progress::record(OnDemand::Movie(r.key.clone()), 6000, 100000, i as i64).unwrap()
+            })
+            .collect();
         let query = "movie";
         let folded = query.to_ascii_lowercase();
         let alternative = |r: &&ProviderVod| {
@@ -208,4 +214,34 @@ fn metadata_and_search_comparison() {
             }
         }
     }
+}
+
+#[test]
+fn changed_then_restored_inputs_must_not_accept_old_match() {
+    // Domain-Layer.md section 7: changed match inputs during enrichment
+    // must not allow the old result to be committed, even if inputs return to A.
+    let original = provider(0);
+    let token = MatchInputs::from(&original)
+        .supplied(&candidate(0))
+        .unwrap();
+    let mut vod = Vod::new(original.clone());
+    let mut changed = original.clone();
+    changed.name = "Different title".into();
+    assert!(vod.refresh(changed));
+    assert!(vod.refresh(original));
+    assert!(!vod.attach(token, details()), "stale A-B-A token accepted");
+}
+
+#[test]
+fn invalid_tmdb_date_must_fall_back_to_provider() {
+    // DOM-019/020: prefer valid TMDB fields, otherwise field-level fallback.
+    let original = provider(0);
+    let token = MatchInputs::from(&original)
+        .supplied(&candidate(0))
+        .unwrap();
+    let mut vod = Vod::new(original);
+    let mut metadata = details();
+    metadata.presentation.date = Some("not-a-date".into());
+    assert!(vod.attach(token, metadata));
+    assert_eq!(vod.display().date.as_deref(), Some("2021-01-01"));
 }
